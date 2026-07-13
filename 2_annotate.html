@@ -1,0 +1,1366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CAST/LIST — anime character labeling bench</title>
+<style>
+  :root{
+    --bg:#0e1116; --bay:#0a0c10; --panel:#151920; --panel2:#191e27;
+    --line:#252c37; --line2:#303945;
+    --ink:#e9e6de; --muted:#8b93a1; --dim:#5d6572;
+    --accent:#ffb454; --accent-ink:#160f04;
+    --red:#ff5d5d; --green:#77d98b;
+    --mono:ui-monospace,"Cascadia Mono","JetBrains Mono","SFMono-Regular",Menlo,Consolas,monospace;
+    --sans:"Avenir Next","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box; margin:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg); color:var(--ink);
+    font:13px/1.45 var(--mono);
+    display:grid; grid-template-rows:46px 1fr 26px;
+    overflow:hidden;
+  }
+  button{font:inherit; color:inherit; background:none; border:none; cursor:pointer}
+  input{font:inherit; color:inherit}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-thumb{background:#2b323e;border-radius:9px;border:2px solid var(--panel)}
+  ::-webkit-scrollbar-track{background:transparent}
+
+  /* ---------- header ---------- */
+  header{
+    display:flex; align-items:center; gap:14px; padding:0 12px;
+    background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border-bottom:1px solid var(--line);
+  }
+  .wordmark{display:flex; align-items:baseline; gap:1px; letter-spacing:.14em; font-weight:700; font-size:13px; white-space:nowrap; user-select:none}
+  .wordmark .slash{color:var(--accent); font-weight:800}
+  .wordmark small{margin-left:8px; letter-spacing:.08em; font-weight:400; color:var(--dim); font-size:10px}
+  .imgnav{display:flex; align-items:center; gap:6px; min-width:0; flex:1; justify-content:center}
+  .imgnav .fname{color:var(--ink); max-width:34vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .imgnav .idx{color:var(--dim)}
+  .navbtn{width:26px;height:26px;border:1px solid var(--line2);border-radius:6px;color:var(--muted)}
+  .navbtn:hover{color:var(--ink);border-color:var(--accent)}
+  .progress{display:flex; align-items:center; gap:8px; white-space:nowrap}
+  .progress .nums{color:var(--muted); font-size:11px}
+  .progress .nums b{color:var(--ink)}
+  .bar{width:130px;height:8px;border:1px solid var(--line2);border-radius:5px;overflow:hidden;background:var(--bay)}
+  .bar>i{display:block;height:100%;width:0%;background:linear-gradient(90deg,#e79a2e,var(--accent))}
+  .hbtns{display:flex; gap:8px}
+  .btn{
+    padding:5px 11px; border:1px solid var(--line2); border-radius:6px;
+    color:var(--muted); letter-spacing:.05em; font-size:12px; background:var(--panel);
+  }
+  .btn:hover{color:var(--ink); border-color:var(--accent)}
+  .btn.primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:700}
+  .btn.primary:hover{filter:brightness(1.07)}
+  .btn:focus-visible,.navbtn:focus-visible,input:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+
+  /* ---------- main ---------- */
+  main{display:grid; grid-template-columns:236px minmax(0,1fr) 300px; min-height:0}
+  aside{background:var(--panel); min-height:0; display:flex; flex-direction:column}
+  #filmstrip{border-right:1px solid var(--line)}
+  #panel{border-left:1px solid var(--line)}
+  .paneltitle{
+    padding:8px 12px 6px; font-size:10px; letter-spacing:.22em; color:var(--dim);
+    border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; user-select:none;
+  }
+  .paneltitle .cnt{letter-spacing:0; color:var(--muted)}
+
+  /* filmstrip rows */
+  #filmlist{overflow-y:auto; flex:1; padding:4px 0}
+  .frow{
+    display:flex; align-items:center; gap:8px; width:100%; text-align:left;
+    padding:5px 12px; font-size:12px; color:var(--muted); border-left:2px solid transparent;
+  }
+  .frow:hover{background:var(--panel2); color:var(--ink)}
+  .frow.cur{background:var(--panel2); color:var(--ink); border-left-color:var(--accent)}
+  .frow .num{color:var(--dim); font-size:10px; width:30px; flex:none}
+  .frow .name{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .frow .st{flex:none; font-size:10px; padding:1px 6px; border-radius:4px; border:1px solid var(--line2); color:var(--muted)}
+  .frow .st.done{color:var(--green); border-color:color-mix(in srgb,var(--green) 40%,transparent)}
+  .frow .st.todo{color:var(--red); border-color:color-mix(in srgb,var(--red) 40%,transparent)}
+  .frow .st.part{color:var(--accent); border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+  .frow .st.nofile{color:var(--dim); border-style:dashed}
+
+  /* ---------- stage ---------- */
+  #stage{position:relative; min-width:0; background:
+    radial-gradient(120% 90% at 50% 0%, rgba(255,180,84,.045), transparent 55%),
+    repeating-linear-gradient(135deg, rgba(255,255,255,.012) 0 2px, transparent 2px 9px),
+    var(--bay);
+  }
+  #cv{position:absolute; inset:0; width:100%; height:100%; touch-action:none; display:block}
+  #cv.grabbing{cursor:grabbing !important}
+  .hud{
+    position:absolute; left:10px; bottom:10px; display:flex; gap:6px; align-items:center;
+    background:color-mix(in srgb,var(--panel) 88%,transparent); border:1px solid var(--line2);
+    border-radius:8px; padding:4px; backdrop-filter:blur(4px);
+  }
+  .hud button{min-width:26px;height:24px;border-radius:5px;color:var(--muted);font-size:12px;padding:0 7px}
+  .hud button:hover{color:var(--ink); background:var(--panel2)}
+  .hud button.on{background:var(--accent); color:var(--accent-ink); font-weight:700}
+  .hud .sep{width:1px;height:16px;background:var(--line2)}
+  .hud .zl{color:var(--muted); font-size:11px; min-width:44px; text-align:center}
+
+  /* empty state */
+  #empty{
+    position:absolute; inset:0; display:flex; flex-direction:column; gap:18px;
+    align-items:center; justify-content:center; text-align:center; padding:20px;
+  }
+  #empty.hide{display:none}
+  #empty .mark{font-size:26px; letter-spacing:.18em; font-weight:700}
+  #empty .mark .slash{color:var(--accent)}
+  #empty p{color:var(--muted); font-family:var(--sans); max-width:460px; font-size:13.5px}
+  #empty .steps{display:flex; gap:10px; flex-wrap:wrap; justify-content:center}
+  #empty .bigbtn{
+    border:1px dashed var(--line2); border-radius:10px; padding:14px 18px; color:var(--ink);
+    background:var(--panel); font-size:12.5px; letter-spacing:.03em;
+  }
+  #empty .bigbtn b{color:var(--accent)}
+  #empty .bigbtn .sub{display:block; color:var(--dim); font-size:10.5px; margin-top:5px; letter-spacing:.02em}
+  #empty .bigbtn:hover{border-color:var(--accent)}
+  #empty .drop{color:var(--dim); font-size:11px; letter-spacing:.1em}
+  body.dragging #stage{outline:2px dashed var(--accent); outline-offset:-8px}
+
+  /* ---------- right panel ---------- */
+  #roster{flex:1.2; display:flex; flex-direction:column; min-height:120px; border-bottom:1px solid var(--line)}
+  #boxes{flex:1; display:flex; flex-direction:column; min-height:100px}
+  .addrow{display:flex; gap:6px; padding:8px 10px; border-bottom:1px solid var(--line)}
+  .addrow input{
+    flex:1; min-width:0; background:var(--bay); border:1px solid var(--line2); border-radius:6px;
+    padding:5px 8px; font-size:12px; color:var(--ink);
+  }
+  .addrow input::placeholder{color:var(--dim)}
+  .addrow .btn{padding:4px 10px}
+  #rosterlist,#boxlist{overflow-y:auto; flex:1; padding:5px 6px}
+  .crow{
+    display:flex; align-items:center; gap:8px; width:100%; padding:4px 6px;
+    border-radius:7px; text-align:left; color:var(--ink); position:relative;
+  }
+  .crow:hover{background:var(--panel2)}
+  .crow .key{
+    flex:none; width:18px; height:18px; border:1px solid var(--line2); border-bottom-width:2px;
+    border-radius:4px; font-size:10px; color:var(--muted); display:grid; place-items:center; background:var(--bay);
+  }
+  .crow .sw{flex:none; width:14px; height:14px; border-radius:4px; box-shadow:inset 0 0 0 1px rgba(0,0,0,.35)}
+  .crow .nm{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12.5px}
+  .crow .ct{flex:none; color:var(--dim); font-size:11px}
+  .crow .del,.crow .ren{flex:none; color:var(--dim); width:18px; visibility:hidden; cursor:pointer; text-align:center}
+  .crow:hover .del,.crow:hover .ren{visibility:visible}
+  .crow .del:hover{color:var(--red)}
+  .crow .ren:hover{color:var(--accent)}
+  .crow.ignore .sw{background:repeating-linear-gradient(45deg,#4a5261 0 3px,#343b47 3px 6px)}
+  .hintline{padding:6px 12px 9px; color:var(--dim); font-size:10.5px; font-family:var(--sans); border-top:1px solid var(--line)}
+
+  .brow{
+    display:flex; align-items:center; gap:8px; width:100%; padding:4px 6px;
+    border-radius:7px; text-align:left; color:var(--muted); border:1px solid transparent;
+  }
+  .brow:hover{background:var(--panel2); color:var(--ink)}
+  .brow.sel{border-color:var(--accent); color:var(--ink); background:var(--panel2)}
+  .brow .bid{flex:none; width:30px; color:var(--dim); font-size:11px}
+  .brow .chip{
+    flex:none; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    font-size:11px; padding:1px 7px; border-radius:4px; color:#10131a; font-weight:700;
+  }
+  .brow .chip.none{background:none; border:1px dashed var(--red); color:var(--red); font-weight:400}
+  .brow .sc{margin-left:auto; flex:none; color:var(--dim); font-size:10.5px}
+
+  /* ---------- footer / toasts / help ---------- */
+  footer{
+    display:flex; align-items:center; gap:16px; padding:0 12px;
+    background:var(--panel); border-top:1px solid var(--line);
+    color:var(--dim); font-size:11px; white-space:nowrap; overflow:hidden;
+  }
+  footer .mode{color:var(--accent)}
+  footer .coords{min-width:120px}
+  footer .hint{margin-left:auto; overflow:hidden; text-overflow:ellipsis}
+  footer kbd,dialog kbd{
+    font-family:var(--mono); font-size:10px; color:var(--ink);
+    border:1px solid var(--line2); border-bottom-width:2px; border-radius:4px;
+    padding:0 4px; background:var(--bay);
+  }
+  #toasts{position:fixed; right:14px; top:56px; display:flex; flex-direction:column; gap:8px; z-index:50}
+  .toast{
+    background:var(--panel2); border:1px solid var(--line2); border-left:3px solid var(--accent);
+    color:var(--ink); padding:8px 12px; border-radius:8px; font-size:12px; max-width:340px;
+    box-shadow:0 6px 24px rgba(0,0,0,.45); animation:tin .18s ease-out;
+  }
+  .toast.warn{border-left-color:var(--red)}
+  .toast.ok{border-left-color:var(--green)}
+  @keyframes tin{from{transform:translateX(12px);opacity:0}}
+  dialog{
+    margin:auto; background:var(--panel); color:var(--ink); border:1px solid var(--line2);
+    border-radius:12px; padding:22px 26px; max-width:640px; width:min(92vw,640px);
+    font-family:var(--sans); font-size:13.5px;
+  }
+  dialog::backdrop{background:rgba(5,7,10,.65)}
+  dialog h2{font-family:var(--mono); letter-spacing:.14em; font-size:14px; margin-bottom:10px}
+  dialog h3{font-family:var(--mono); letter-spacing:.14em; font-size:11px; color:var(--accent); margin:16px 0 6px}
+  dialog p{color:var(--muted); margin:4px 0}
+  dialog .keys{display:grid; grid-template-columns:auto 1fr auto 1fr; gap:5px 14px; font-size:12.5px; color:var(--muted); align-items:center}
+  dialog .keys span{color:var(--ink)}
+  dialog .x{position:absolute; right:12px; top:10px; color:var(--dim); font-size:16px}
+  @media (max-width:900px){
+    main{grid-template-columns:0 minmax(0,1fr) 260px}
+    #filmstrip{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){ .toast{animation:none} }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wordmark">CAST<span class="slash">/</span>LIST<small>character labeling bench</small></div>
+  <div class="imgnav">
+    <button class="navbtn" id="prevImg" title="Previous image (P)">◀</button>
+    <span class="fname" id="fname">no image</span>
+    <span class="idx" id="fidx">0/0</span>
+    <button class="navbtn" id="nextImg" title="Next image (N)">▶</button>
+  </div>
+  <div class="progress" title="labeled boxes / total boxes">
+    <div class="bar"><i id="pbar"></i></div>
+    <span class="nums"><b id="pnum">0</b>/<span id="ptot">0</span> boxes · <b id="pimg">0</b>/<span id="pimgtot">0</span> imgs</span>
+  </div>
+  <div class="hbtns">
+    <button class="btn" id="btnDir" title="Load an image folder — the annotations.json inside is picked up automatically">FOLDER</button>
+    <button class="btn" id="btnJson" title="Load an annotations JSON by itself (COCO; legacy files are migrated)">JSON</button>
+    <button class="btn" id="btnImgs" title="Load loose image files">IMAGES</button>
+    <button class="btn primary" id="btnExport" title="Export labeled JSON (Ctrl+S)">EXPORT</button>
+    <button class="btn" id="btnHelp" title="Shortcuts (?)">?</button>
+  </div>
+</header>
+
+<main>
+  <aside id="filmstrip">
+    <div class="paneltitle"><span>IMAGES</span><span class="cnt" id="filmcnt">0</span></div>
+    <div id="filmlist"></div>
+  </aside>
+
+  <section id="stage">
+    <canvas id="cv"></canvas>
+    <div class="hud">
+      <button id="mSelect" class="on" title="Select / move / resize (V)">SELECT</button>
+      <button id="mDraw" title="Draw a new box (B)">DRAW</button>
+      <span class="sep"></span>
+      <button id="zOut" title="Zoom out (−)">−</button>
+      <span class="zl" id="zLabel">100%</span>
+      <button id="zIn" title="Zoom in (+)">＋</button>
+      <button id="zFit" title="Fit image (F)">FIT</button>
+    </div>
+    <div id="empty">
+      <div class="mark">CAST<span class="slash">/</span>LIST</div>
+      <p>Put a name to every detected character. Point <span style="font-family:var(--mono)">1_detect.py</span>
+        at your image folder — SAM&nbsp;3 writes a COCO <b>annotations.json</b> into it — then load that
+        folder here: boxes and images arrive together. Click a box, press a number key, repeat.</p>
+      <div class="steps">
+        <button class="bigbtn" id="eDir"><b>1.</b> Load the image folder<span class="sub">annotations.json inside loads automatically</span></button>
+        <button class="bigbtn" id="eJson">Load a JSON only</button>
+        <button class="bigbtn" id="eImgs">Load image files only</button>
+      </div>
+      <div class="drop">— OR DRAG &amp; DROP THE FOLDER ANYWHERE —</div>
+    </div>
+  </section>
+
+  <aside id="panel">
+    <section id="roster">
+      <div class="paneltitle"><span>CAST</span><span class="cnt" id="rostercnt">0</span></div>
+      <div class="addrow">
+        <input id="addName" type="text" placeholder="add character… (Enter)" autocomplete="off" spellcheck="false">
+        <button class="btn" id="addBtn">ADD</button>
+      </div>
+      <div id="rosterlist"></div>
+      <div class="hintline">Click a name (or press its key) to assign it to the selected box. Hover a name for rename ✎ and remove ✕.</div>
+    </section>
+    <section id="boxes">
+      <div class="paneltitle"><span>BOXES · THIS IMAGE</span><span class="cnt" id="boxcnt">0</span></div>
+      <div id="boxlist"></div>
+    </section>
+  </aside>
+</main>
+
+<footer>
+  <span class="mode" id="fMode">SELECT</span>
+  <span class="coords" id="fCoords">—</span>
+  <span id="fSel">no box selected</span>
+  <span class="hint">assign <kbd>1</kbd>–<kbd>9</kbd> · ignore <kbd>0</kbd> · next unlabeled <kbd>Enter</kbd> · cycle <kbd>Tab</kbd> · delete <kbd>X</kbd> · draw <kbd>B</kbd> · help <kbd>?</kbd></span>
+</footer>
+
+<div id="toasts"></div>
+
+<dialog id="help">
+  <button class="x" id="helpX" title="Close">✕</button>
+  <h2>CAST<span style="color:var(--accent)">/</span>LIST</h2>
+  <p>Step 2 of the pipeline: turn anonymous SAM&nbsp;3 boxes into named characters.
+     Load your image folder — the COCO <b>annotations.json</b> that <b>1_detect.py</b> wrote into it
+     is picked up automatically. Label every box, then <b>EXPORT</b> (COCO format) and feed the
+     result to <b>3_export.py</b>. The export is also your save file — load it back any time to resume.</p>
+  <h3>LABELING</h3>
+  <div class="keys">
+    <kbd>1</kbd>–<kbd>9</kbd><span>assign character to selected box</span>
+    <kbd>0</kbd><span>mark as ignore / not a character</span>
+    <kbd>Enter</kbd><span>jump to next unlabeled box</span>
+    <kbd>Tab</kbd><span>cycle boxes in this image</span>
+    <kbd>X</kbd><span>delete selected box (false positive)</span>
+    <kbd>U</kbd><span>undo last delete</span>
+  </div>
+  <h3>BOXES</h3>
+  <div class="keys">
+    <kbd>B</kbd><span>draw a missed box (drag)</span>
+    <kbd>V</kbd> / <kbd>Esc</kbd><span>back to select / deselect</span>
+    <kbd>←↑↓→</kbd><span>nudge selected box (Shift = ×10)</span>
+    <span style="grid-column:span 2;color:var(--dim)">drag inside a box to move it, drag its handles to resize</span>
+  </div>
+  <h3>VIEW & FILES</h3>
+  <div class="keys">
+    <kbd>wheel</kbd><span>zoom at cursor</span>
+    <kbd>drag</kbd><span>pan (empty area or hold Space)</span>
+    <kbd>F</kbd><span>fit image</span>
+    <kbd>Z</kbd><span>zoom to selected box</span>
+    <kbd>N</kbd> / <kbd>P</kbd><span>next / previous image</span>
+    <kbd>Ctrl</kbd>+<kbd>S</kbd><span>export labeled JSON</span>
+  </div>
+</dialog>
+
+<input type="file" id="inJson" accept=".json,application/json" hidden>
+<input type="file" id="inImgs" accept="image/*" multiple hidden>
+<input type="file" id="inDir" webkitdirectory hidden>
+
+<script>
+"use strict";
+/* ============================== state ============================== */
+const IGNORE = "__ignore__";
+const PALETTE = ["#ffb454","#7fd1f7","#f77fbe","#9ce37d","#c9a2ff","#ff8a5c",
+                 "#5ce0c6","#f7e36b","#7fa1ff","#ff7f9c","#8fe05c","#5cb8ff",
+                 "#e09e5c","#b8f75c","#da7ff7","#5cf78f"];
+const MONO = getComputedStyle(document.documentElement).getPropertyValue("--mono");
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const state = {
+  meta: {},            // pass-through metadata from the detect manifest
+  images: [],          // {fileName, relPath, width, height, dets:[], file, key}
+  labels: [],          // {name, color}
+  cur: -1, sel: -1, hover: -1,
+  mode: "select",
+  view: {scale: 1, x: 0, y: 0},
+  dirty: false,
+};
+const undoStack = [];  // deleted boxes: {imgKey, det, pos}
+
+/* ============================== dom ============================== */
+const $ = id => document.getElementById(id);
+const cv = $("cv"), ctx = cv.getContext("2d");
+const stage = $("stage");
+let rowEls = [];       // filmstrip row elements
+
+/* ============================== helpers ============================== */
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const norm = s => String(s).trim();
+
+function toast(msg, kind = "") {
+  const t = document.createElement("div");
+  t.className = "toast " + kind;
+  t.textContent = msg;
+  $("toasts").appendChild(t);
+  setTimeout(() => t.remove(), 2800);
+}
+
+function labelColor(name) {
+  const l = state.labels.find(l => l.name === name);
+  return l ? l.color : "#9aa3b2";
+}
+function detDone(d) { return d.label !== null && d.label !== undefined && d.label !== ""; }
+function imgStats(e) {
+  const total = e.dets.length;
+  const done = e.dets.filter(detDone).length;
+  return {total, done, todo: total - done};
+}
+function curEntry() { return state.images[state.cur] || null; }
+
+/* ============================== file matching ============================== */
+function stripRoot(rel) {
+  const parts = rel.split("/").filter(Boolean);
+  return parts.length > 1 ? parts.slice(1).join("/") : parts.join("/");
+}
+function attachFile(file, rel) {
+  const relNoRoot = rel ? stripRoot(rel) : "";
+  let e = relNoRoot && state.images.find(x => x.relPath === relNoRoot && !x.file);
+  if (!e) e = state.images.find(x => x.fileName === file.name && !x.file);
+  if (!e) e = relNoRoot && state.images.find(x => x.relPath === relNoRoot);
+  if (!e) e = state.images.find(x => x.fileName === file.name);
+  if (e) { e.file = file; return {matched: true}; }
+  state.images.push({
+    fileName: file.name, relPath: relNoRoot || file.name,
+    width: 0, height: 0, dets: [], file, key: "new:" + file.name + ":" + state.images.length,
+  });
+  return {matched: false};
+}
+async function addImageFiles(files) {
+  let matched = 0, added = 0;
+  for (const f of files) {
+    if (!f.type.startsWith("image/")) continue;
+    const r = attachFile(f, f.webkitRelativePath || f._relPath || "");
+    r.matched ? matched++ : added++;
+  }
+  if (!matched && !added) { toast("no image files found", "warn"); return; }
+  let msg = matched + " image file(s) matched to the manifest";
+  if (added) msg += ", " + added + " new (not in JSON)";
+  toast(msg, "ok");
+  imageCache.clear(true);
+  renderFilmstrip();
+  if (state.cur < 0 && state.images.length) {
+    const first = state.images.findIndex(e => e.file);
+    selectImage(first >= 0 ? first : 0);
+  } else if (state.cur >= 0) {
+    selectImage(state.cur);   // re-decode in case the current entry just got its file
+  }
+  checkEmpty();
+}
+
+/* ============================== json load / export ============================== */
+function loadJsonText(text, srcName) {
+  let data;
+  try { data = JSON.parse(text); } catch { toast("could not parse " + srcName, "warn"); return false; }
+
+  const oldFiles = new Map();
+  for (const e of state.images) if (e.file) {
+    oldFiles.set(e.relPath, e.file);
+    if (!oldFiles.has(e.fileName)) oldFiles.set(e.fileName, e.file);
+  }
+  const fileFor = (rel, name) => oldFiles.get(rel) || oldFiles.get(name) || null;
+
+  let ok = false;
+  if (data && Array.isArray(data.images) && Array.isArray(data.annotations) && Array.isArray(data.categories)) {
+    ok = importCoco(data, fileFor);
+  } else if (data && Array.isArray(data.images) && data.images.some(im => Array.isArray(im.detections))) {
+    ok = importLegacy(data, fileFor);
+    if (ok) toast("legacy manifest migrated — the next EXPORT will be COCO");
+  } else {
+    toast(srcName + " is not a COCO annotations file", "warn");
+    return false;
+  }
+  if (!ok) return false;
+
+  state.cur = -1; state.sel = -1; state.dirty = false;
+  undoStack.length = 0;
+  imageCache.clear(true);
+  const nBox = state.images.reduce((a, e) => a + e.dets.length, 0);
+  toast("loaded " + state.images.length + " image entr" + (state.images.length === 1 ? "y" : "ies") +
+        " · " + nBox + " box(es)", "ok");
+  renderFilmstrip(); renderRoster();
+  const first = state.images.findIndex(e => imgStats(e).todo > 0);
+  selectImage(first >= 0 ? first : (state.images.length ? 0 : -1));
+  checkEmpty();
+  return true;
+}
+
+function pushLabel(name, color) {
+  name = norm(name);
+  const lc = name.toLowerCase();
+  if (!name || lc === "unlabeled" || lc === "ignore" || name === IGNORE) return;
+  if (state.labels.some(l => l.name.toLowerCase() === lc)) return;
+  state.labels.push({name, color: color || PALETTE[state.labels.length % PALETTE.length]});
+}
+
+function importCoco(data, fileFor) {
+  state.meta = {info: data.info || {}, licenses: data.licenses || []};
+  state.labels = [];
+  const catById = new Map();
+  for (const c of data.categories) {
+    catById.set(c.id, c);
+    pushLabel(c.name, c.color);
+  }
+  const byId = new Map();
+  state.images = data.images.map((im, i) => {
+    const rel = String(im.file_name || "image_" + i);
+    const {id, file_name, width, height, ...extraImg} = im;
+    const e = {
+      fileName: rel.split("/").pop(), relPath: rel,
+      width: width | 0, height: height | 0,
+      dets: [], file: fileFor(rel, rel.split("/").pop()),
+      key: rel, cocoId: id ?? i + 1, extraImg,
+    };
+    byId.set(e.cocoId, e);
+    return e;
+  });
+  let dropped = 0;
+  for (const a of data.annotations) {
+    const e = byId.get(a.image_id);
+    if (!e || !Array.isArray(a.bbox)) { dropped++; continue; }
+    const {id, image_id, category_id, bbox, area, score, source, ...extra} = a;
+    const [x, y, w, h] = bbox.map(Number);
+    const cat = catById.get(category_id);
+    const lc = cat ? String(cat.name).trim().toLowerCase() : "unlabeled";
+    const label = lc === "unlabeled" ? null : lc === "ignore" ? IGNORE : norm(cat.name);
+    e.dets.push({
+      id: e.dets.length + 1, bbox: [x, y, x + w, y + h],
+      score: score ?? null, label, source: source || "detector", extra,
+    });
+  }
+  if (dropped) toast(dropped + " annotation(s) skipped (missing image or bbox)", "warn");
+  state.nextImgId = Math.max(0, ...state.images.map(e => e.cocoId)) + 1;
+  return true;
+}
+
+function importLegacy(data, fileFor) {
+  state.meta = {info: {description: "migrated from a legacy CAST/LIST manifest",
+                       legacy_detector: data.detector || null},
+                licenses: []};
+  state.labels = [];
+  for (const l of (data.label_set || [])) pushLabel(l.name, l.color);
+  state.images = data.images.map((e, i) => ({
+    fileName: e.file_name || "image_" + i,
+    relPath: e.rel_path || e.file_name || "image_" + i,
+    width: e.width | 0, height: e.height | 0,
+    dets: (e.detections || []).map((d, j) => ({
+      id: j + 1, bbox: d.bbox.map(Number), score: d.score ?? null,
+      label: d.label ?? null, source: d.source || "detector", extra: {},
+    })),
+    file: fileFor(e.rel_path || e.file_name, e.file_name),
+    key: (e.rel_path || e.file_name || i) + "", cocoId: i + 1, extraImg: {},
+  }));
+  for (const e of state.images) for (const d of e.dets)
+    if (detDone(d) && d.label !== IGNORE) pushLabel(d.label);
+  state.nextImgId = state.images.length + 1;
+  return true;
+}
+
+function exportJSON() {
+  if (!state.images.length) { toast("nothing to export yet", "warn"); return; }
+  let nIgn = 0, nUnl = 0;
+  for (const e of state.images) for (const d of e.dets) {
+    if (d.label === IGNORE) nIgn++;
+    else if (!detDone(d)) nUnl++;
+  }
+  const cats = [];
+  const catId = new Map();
+  for (const l of state.labels) {
+    cats.push({id: cats.length + 1, name: l.name, supercategory: "character", color: l.color});
+    catId.set(l.name, cats.length);
+  }
+  if (nIgn) { cats.push({id: cats.length + 1, name: "ignore", supercategory: "meta"}); catId.set(IGNORE, cats.length); }
+  if (nUnl) { cats.push({id: cats.length + 1, name: "unlabeled", supercategory: "meta"}); catId.set(null, cats.length); }
+
+  state.nextImgId = state.nextImgId || 1;
+  const cocoImages = [], cocoAnns = [];
+  let annId = 0;
+  for (const e of state.images) {
+    if (e.cocoId == null) e.cocoId = state.nextImgId++;
+    cocoImages.push({...(e.extraImg || {}), id: e.cocoId, file_name: e.relPath,
+                     width: e.width, height: e.height});
+    for (const d of e.dets) {
+      const key = !detDone(d) ? null : d.label;
+      if (key !== null && key !== IGNORE && !catId.has(key)) {
+        cats.push({id: cats.length + 1, name: key, supercategory: "character"});
+        catId.set(key, cats.length);
+      }
+      const [x0, y0, x1, y1] = d.bbox.map(Math.round);
+      const w = x1 - x0, h = y1 - y0;
+      const ann = {
+        ...(d.extra || {}),
+        id: ++annId, image_id: e.cocoId,
+        category_id: catId.get(key),
+        bbox: [x0, y0, w, h], area: w * h,
+        iscrowd: (d.extra && d.extra.iscrowd) || 0,
+        source: d.source || "detector",
+      };
+      if (d.score != null) ann.score = d.score;
+      cocoAnns.push(ann);
+    }
+  }
+  const out = {
+    info: {...(state.meta.info || {}),
+           description: (state.meta.info && state.meta.info.description) ||
+                        "CAST/LIST character annotations",
+           date_labeled: new Date().toISOString(),
+           labeled_by: "2_annotate.html"},
+    licenses: state.meta.licenses || [],
+    categories: cats,
+    images: cocoImages,
+    annotations: cocoAnns,
+  };
+  const blob = new Blob([JSON.stringify(out, null, 1)], {type: "application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "annotations_labeled.json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  state.dirty = false;
+  toast(nUnl ? "exported COCO (" + nUnl + " box(es) still unlabeled)"
+             : "exported COCO — all boxes labeled", nUnl ? "" : "ok");
+}
+
+/* ============================== image cache ============================== */
+const imageCache = {
+  map: new Map(), // key -> {img, url}
+  async get(entry) {
+    if (!entry || !entry.file) return null;
+    const hit = this.map.get(entry.key);
+    if (hit) { this.map.delete(entry.key); this.map.set(entry.key, hit); return hit.img; }
+    const url = URL.createObjectURL(entry.file);
+    const img = new Image();
+    img.src = url;
+    try { await img.decode(); }
+    catch { URL.revokeObjectURL(url); toast("could not decode " + entry.fileName, "warn"); return null; }
+    if (!entry.width || !entry.height) {
+      entry.width = img.naturalWidth; entry.height = img.naturalHeight;
+    } else if (entry.width !== img.naturalWidth || entry.height !== img.naturalHeight) {
+      const sx = img.naturalWidth / entry.width, sy = img.naturalHeight / entry.height;
+      for (const d of entry.dets) d.bbox = [d.bbox[0]*sx, d.bbox[1]*sy, d.bbox[2]*sx, d.bbox[3]*sy].map(Math.round);
+      entry.width = img.naturalWidth; entry.height = img.naturalHeight;
+      state.dirty = true;
+      toast(entry.fileName + ": size differs from manifest — boxes rescaled", "warn");
+    }
+    this.map.set(entry.key, {img, url});
+    while (this.map.size > 8) {
+      const [k, v] = this.map.entries().next().value;
+      this.map.delete(k); URL.revokeObjectURL(v.url);
+    }
+    return img;
+  },
+  clear(revoke) {
+    if (revoke) for (const v of this.map.values()) URL.revokeObjectURL(v.url);
+    this.map.clear();
+  },
+};
+let curImg = null;      // decoded Image for current entry
+let loadSeq = 0;
+
+/* ============================== navigation ============================== */
+async function selectImage(i) {
+  const prev = state.cur;
+  if (i < 0 || i >= state.images.length) { state.cur = -1; curImg = null; renderAll(); requestDraw(); return; }
+  state.cur = i; state.sel = -1; state.hover = -1;
+  if (prev >= 0 && prev !== i) updateRow(prev);
+  const entry = state.images[i];
+  const seq = ++loadSeq;
+  curImg = null;
+  fitView();               // fit from manifest dims first for instant layout
+  renderAll(); requestDraw();
+  const img = await imageCache.get(entry);
+  if (seq !== loadSeq) return;
+  curImg = img;
+  fitView();
+  const firstTodo = entry.dets.findIndex(d => !detDone(d));
+  if (firstTodo >= 0) state.sel = firstTodo;
+  renderAll(); requestDraw();
+}
+function stepImage(dir) {
+  if (!state.images.length) return;
+  selectImage(clamp(state.cur + dir, 0, state.images.length - 1));
+}
+function jumpNextUnlabeled() {
+  const n = state.images.length;
+  if (!n) return;
+  const e = curEntry();
+  if (e) {
+    const start = state.sel;
+    for (let k = 1; k <= e.dets.length; k++) {
+      const j = ((start < 0 ? -1 : start) + k) % e.dets.length;
+      if (!detDone(e.dets[j])) { state.sel = j; ensureVisible(e.dets[j]); renderAll(); requestDraw(); return; }
+    }
+  }
+  for (let k = 1; k <= n; k++) {
+    const j = (state.cur + k) % n;
+    if (imgStats(state.images[j]).todo > 0) { selectImage(j); return; }
+  }
+  toast("every box is labeled — hit EXPORT", "ok");
+}
+
+/* ============================== labels ============================== */
+function addLabel(nameRaw) {
+  const name = norm(nameRaw);
+  if (!name) return null;
+  const lc = name.toLowerCase();
+  if (lc === "ignore" || name === IGNORE) { toast("'ignore' is built in — press 0", "warn"); return null; }
+  if (lc === "unlabeled") { toast("'unlabeled' is reserved for pending boxes", "warn"); return null; }
+  const exist = state.labels.find(l => l.name.toLowerCase() === name.toLowerCase());
+  if (exist) return exist;
+  const l = {name, color: PALETTE[state.labels.length % PALETTE.length]};
+  state.labels.push(l);
+  state.dirty = true;
+  renderRoster();
+  return l;
+}
+function assign(name) {
+  const e = curEntry();
+  if (!e) return;
+  if (state.sel < 0) {
+    const j = e.dets.findIndex(d => !detDone(d));
+    if (j < 0) { toast("no unlabeled box in this image", "warn"); return; }
+    state.sel = j;
+  }
+  const d = e.dets[state.sel];
+  d.label = name;
+  state.dirty = true;
+  const next = e.dets.findIndex((x, j) => j !== state.sel && !detDone(x));
+  updateRow(state.cur);
+  if (next >= 0) { state.sel = next; ensureVisible(e.dets[next]); }
+  else toast("image done — Enter / N for the next one", "ok");
+  renderAll(); requestDraw();
+}
+function renameLabel(l) {
+  const to = norm(prompt('Rename "' + l.name + '" to:', l.name) || "");
+  if (!to || to === l.name) return;
+  if (state.labels.some(x => x !== l && x.name.toLowerCase() === to.toLowerCase())) { toast("that name already exists", "warn"); return; }
+  for (const e of state.images) for (const d of e.dets) if (d.label === l.name) d.label = to;
+  l.name = to; state.dirty = true;
+  renderAll(); requestDraw();
+}
+function removeLabel(l) {
+  const used = state.images.reduce((a, e) => a + e.dets.filter(d => d.label === l.name).length, 0);
+  if (used && !confirm('Remove "' + l.name + '"? ' + used + " box(es) will go back to unlabeled.")) return;
+  for (const e of state.images) for (const d of e.dets) if (d.label === l.name) d.label = null;
+  state.labels = state.labels.filter(x => x !== l);
+  state.dirty = true;
+  renderFilmstrip(); renderAll(); requestDraw();
+}
+
+/* ============================== boxes ============================== */
+function deleteSel() {
+  const e = curEntry();
+  if (!e || state.sel < 0) return;
+  const det = e.dets[state.sel];
+  undoStack.push({imgKey: e.key, det, pos: state.sel});
+  e.dets.splice(state.sel, 1);
+  state.sel = Math.min(state.sel, e.dets.length - 1);
+  state.dirty = true;
+  toast("box #" + det.id + " deleted — U to undo");
+  updateRow(state.cur); renderAll(); requestDraw();
+}
+function undoDelete() {
+  const u = undoStack.pop();
+  if (!u) { toast("nothing to undo", "warn"); return; }
+  const i = state.images.findIndex(e => e.key === u.imgKey);
+  if (i < 0) return;
+  const e = state.images[i];
+  e.dets.splice(Math.min(u.pos, e.dets.length), 0, u.det);
+  state.dirty = true;
+  if (i !== state.cur) selectImage(i);
+  else { state.sel = Math.min(u.pos, e.dets.length - 1); updateRow(i); renderAll(); requestDraw(); }
+}
+function nudgeSel(dx, dy) {
+  const e = curEntry();
+  if (!e || state.sel < 0) return;
+  const d = e.dets[state.sel];
+  const [x0, y0, x1, y1] = d.bbox, w = x1 - x0, h = y1 - y0;
+  const nx = clamp(x0 + dx, 0, e.width - w), ny = clamp(y0 + dy, 0, e.height - h);
+  d.bbox = [nx, ny, nx + w, ny + h];
+  state.dirty = true;
+  requestDraw();
+}
+
+/* ============================== view / transforms ============================== */
+function toScreen(x, y) { return [x * state.view.scale + state.view.x, y * state.view.scale + state.view.y]; }
+function toImage(sx, sy) { return [(sx - state.view.x) / state.view.scale, (sy - state.view.y) / state.view.scale]; }
+function stageSize() { const r = stage.getBoundingClientRect(); return [r.width, r.height]; }
+
+function fitView() {
+  const e = curEntry();
+  if (!e || !e.width) return;
+  const [w, h] = stageSize();
+  const s = Math.min(w / e.width, h / e.height) * 0.96;
+  state.view.scale = s;
+  state.view.x = (w - e.width * s) / 2;
+  state.view.y = (h - e.height * s) / 2;
+  updateZoomLabel();
+}
+function zoomAt(sx, sy, factor) {
+  const v = state.view;
+  const ns = clamp(v.scale * factor, 0.03, 40);
+  v.x = sx - (sx - v.x) * (ns / v.scale);
+  v.y = sy - (sy - v.y) * (ns / v.scale);
+  v.scale = ns;
+  updateZoomLabel(); requestDraw();
+}
+function zoomToBox(d) {
+  const e = curEntry(); if (!e || !d) return;
+  const [w, h] = stageSize();
+  const bw = d.bbox[2] - d.bbox[0], bh = d.bbox[3] - d.bbox[1];
+  const s = clamp(Math.min(w / bw, h / bh) * 0.55, 0.03, 40);
+  state.view.scale = s;
+  state.view.x = w / 2 - (d.bbox[0] + bw / 2) * s;
+  state.view.y = h / 2 - (d.bbox[1] + bh / 2) * s;
+  updateZoomLabel(); requestDraw();
+}
+function ensureVisible(d) {
+  const [w, h] = stageSize();
+  const [x0, y0] = toScreen(d.bbox[0], d.bbox[1]);
+  const [x1, y1] = toScreen(d.bbox[2], d.bbox[3]);
+  if (x0 >= 0 && y0 >= 0 && x1 <= w && y1 <= h) return;
+  state.view.x += (w / 2) - (x0 + x1) / 2;
+  state.view.y += (h / 2) - (y0 + y1) / 2;
+}
+function updateZoomLabel() { $("zLabel").textContent = Math.round(state.view.scale * 100) + "%"; }
+
+/* ============================== hit testing ============================== */
+const HANDLES = ["nw","n","ne","e","se","s","sw","w"];
+function handlePoints(d) {
+  const [x0, y0] = toScreen(d.bbox[0], d.bbox[1]);
+  const [x1, y1] = toScreen(d.bbox[2], d.bbox[3]);
+  const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+  return {nw:[x0,y0], n:[mx,y0], ne:[x1,y0], e:[x1,my], se:[x1,y1], s:[mx,y1], sw:[x0,y1], w:[x0,my]};
+}
+function hitHandle(sx, sy) {
+  const e = curEntry();
+  if (!e || state.sel < 0) return null;
+  const pts = handlePoints(e.dets[state.sel]);
+  for (const k of HANDLES) {
+    const [px, py] = pts[k];
+    if (Math.abs(sx - px) <= 7 && Math.abs(sy - py) <= 7) return k;
+  }
+  return null;
+}
+function hitBox(ix, iy) {
+  const e = curEntry();
+  if (!e) return -1;
+  let best = -1, bestArea = Infinity;
+  e.dets.forEach((d, i) => {
+    const [x0, y0, x1, y1] = d.bbox;
+    if (ix >= x0 && ix <= x1 && iy >= y0 && iy <= y1) {
+      const a = (x1 - x0) * (y1 - y0);
+      if (a < bestArea) { bestArea = a; best = i; }
+    }
+  });
+  return best;
+}
+
+/* ============================== drawing ============================== */
+let needDraw = true;
+function requestDraw() { needDraw = true; }
+let dashT = 0;
+(function loop(ts) {
+  const animating = state.sel >= 0 && !reduceMotion;
+  if (animating) dashT = (ts / 40) % 20;
+  if (needDraw || animating) { draw(); needDraw = false; }
+  requestAnimationFrame(loop);
+})(0);
+
+new ResizeObserver(() => { requestDraw(); }).observe(stage);
+
+function draw() {
+  const [w, h] = stageSize();
+  const dpr = window.devicePixelRatio || 1;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const e = curEntry();
+  if (!e) return;
+
+  if (curImg) {
+    ctx.imageSmoothingEnabled = state.view.scale < 2.5;
+    ctx.imageSmoothingQuality = "high";
+    const [ox, oy] = toScreen(0, 0);
+    ctx.drawImage(curImg, ox, oy, e.width * state.view.scale, e.height * state.view.scale);
+  } else if (e.width) {
+    const [ox, oy] = toScreen(0, 0);
+    ctx.fillStyle = "rgba(255,255,255,.04)";
+    ctx.fillRect(ox, oy, e.width * state.view.scale, e.height * state.view.scale);
+    ctx.fillStyle = "#5d6572";
+    ctx.font = "12px " + MONO;
+    ctx.fillText(e.file ? "decoding…" : "image file not loaded — use IMAGES", ox + 12, oy + 22);
+  }
+
+  e.dets.forEach((d, i) => {
+    const sel = i === state.sel, hov = i === state.hover;
+    const done = detDone(d);
+    const col = done ? (d.label === IGNORE ? "#7d8697" : labelColor(d.label)) : "#ff5d5d";
+    const [x0, y0] = toScreen(d.bbox[0], d.bbox[1]);
+    const [x1, y1] = toScreen(d.bbox[2], d.bbox[3]);
+    const bw = x1 - x0, bh = y1 - y0;
+
+    ctx.save();
+    if (hov || sel) { ctx.fillStyle = col + "14"; ctx.fillRect(x0, y0, bw, bh); }
+    ctx.lineWidth = sel ? 2.5 : hov ? 2.5 : 2;
+    ctx.strokeStyle = col;
+    ctx.setLineDash(done ? [] : [7, 5]);
+    ctx.strokeRect(x0, y0, bw, bh);
+    ctx.setLineDash([]);
+
+    if (sel) {
+      ctx.strokeStyle = "rgba(255,255,255,.92)";
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([6, 5]);
+      ctx.lineDashOffset = -dashT;
+      ctx.strokeRect(x0 - 3, y0 - 3, bw + 6, bh + 6);
+      ctx.setLineDash([]);
+      const pts = handlePoints(d);
+      for (const k of HANDLES) {
+        const [px, py] = pts[k];
+        ctx.fillStyle = "#fff";
+        ctx.strokeStyle = "#10131a";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.rect(px - 4, py - 4, 8, 8); ctx.fill(); ctx.stroke();
+      }
+    }
+
+    // chip
+    const txt = done
+      ? (d.label === IGNORE ? "ignore" : d.label)
+      : "#" + d.id + (d.score != null ? " · " + Number(d.score).toFixed(2) : "");
+    ctx.font = "700 11px " + MONO;
+    const tw = ctx.measureText(txt).width;
+    const cw = tw + 12, ch = 17;
+    let cx = x0, cy = y0 - ch - 3;
+    if (cy < 2) cy = y0 + 3;
+    if (cx + cw > w - 2) cx = w - 2 - cw;
+    if (cx < 2) cx = 2;
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.roundRect(cx, cy, cw, ch, 4);
+    ctx.fill();
+    ctx.fillStyle = "#10131a";
+    ctx.fillText(txt, cx + 6, cy + 12.5);
+    ctx.restore();
+  });
+
+  if (dragState && dragState.kind === "draw" && dragState.rect) {
+    const [a, b, c, dd] = dragState.rect;
+    const [x0, y0] = toScreen(a, b), [x1, y1] = toScreen(c, dd);
+    ctx.strokeStyle = "#ffb454";
+    ctx.setLineDash([5, 4]);
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+    ctx.setLineDash([]);
+  }
+}
+
+/* ============================== pointer interactions ============================== */
+let dragState = null;
+let spaceDown = false;
+
+const CURSORS = {nw:"nwse-resize", se:"nwse-resize", ne:"nesw-resize", sw:"nesw-resize",
+                 n:"ns-resize", s:"ns-resize", e:"ew-resize", w:"ew-resize"};
+
+cv.addEventListener("pointerdown", ev => {
+  if (!curEntry()) return;
+  cv.setPointerCapture(ev.pointerId);
+  const sx = ev.offsetX, sy = ev.offsetY;
+  const [ix, iy] = toImage(sx, sy);
+
+  if (ev.button === 1 || spaceDown) { dragState = {kind: "pan", lx: ev.clientX, ly: ev.clientY}; cv.classList.add("grabbing"); return; }
+  if (ev.button !== 0) return;
+
+  if (state.mode === "draw") {
+    const e = curEntry();
+    dragState = {kind: "draw", ax: clamp(ix, 0, e.width), ay: clamp(iy, 0, e.height), rect: null};
+    return;
+  }
+  const hk = hitHandle(sx, sy);
+  if (hk) {
+    dragState = {kind: "resize", which: hk, orig: [...curEntry().dets[state.sel].bbox]};
+    return;
+  }
+  const i = hitBox(ix, iy);
+  if (i >= 0) {
+    if (state.sel !== i) { state.sel = i; renderBoxlist(); renderFooter(); requestDraw(); }
+    dragState = {kind: "maybe-move", ax: ix, ay: iy, sx: ev.clientX, sy: ev.clientY,
+                 orig: [...curEntry().dets[i].bbox]};
+  } else {
+    dragState = {kind: "maybe-pan", sx: ev.clientX, sy: ev.clientY, lx: ev.clientX, ly: ev.clientY};
+  }
+});
+
+cv.addEventListener("pointermove", ev => {
+  const sx = ev.offsetX, sy = ev.offsetY;
+  const [ix, iy] = toImage(sx, sy);
+  $("fCoords").textContent = curEntry() ? Math.round(ix) + "," + Math.round(iy) : "—";
+
+  if (!dragState) {
+    let cur = "default";
+    const hk = hitHandle(sx, sy);
+    if (state.mode === "draw") cur = "crosshair";
+    else if (hk) cur = CURSORS[hk];
+    else {
+      const i = hitBox(ix, iy);
+      if (i !== state.hover) { state.hover = i; requestDraw(); renderBoxlist(); }
+      if (i >= 0) cur = "pointer";
+      else if (spaceDown) cur = "grab";
+    }
+    cv.style.cursor = cur;
+    return;
+  }
+
+  const d = dragState;
+  const e = curEntry();
+  if (d.kind === "pan" || d.kind === "maybe-pan") {
+    if (d.kind === "maybe-pan" &&
+        Math.hypot(ev.clientX - d.sx, ev.clientY - d.sy) > 3) { d.kind = "pan"; cv.classList.add("grabbing"); }
+    if (d.kind === "pan") {
+      state.view.x += ev.clientX - d.lx;
+      state.view.y += ev.clientY - d.ly;
+      requestDraw();
+    }
+    d.lx = ev.clientX; d.ly = ev.clientY;
+  } else if (d.kind === "maybe-move" || d.kind === "move") {
+    if (d.kind === "maybe-move" &&
+        Math.hypot(ev.clientX - d.sx, ev.clientY - d.sy) > 3) d.kind = "move";
+    if (d.kind === "move" && state.sel >= 0) {
+      const det = e.dets[state.sel];
+      const w = d.orig[2] - d.orig[0], h = d.orig[3] - d.orig[1];
+      const nx = clamp(d.orig[0] + (ix - d.ax), 0, e.width - w);
+      const ny = clamp(d.orig[1] + (iy - d.ay), 0, e.height - h);
+      det.bbox = [nx, ny, nx + w, ny + h];
+      state.dirty = true;
+      requestDraw();
+    }
+  } else if (d.kind === "resize" && state.sel >= 0) {
+    const det = e.dets[state.sel];
+    let [x0, y0, x1, y1] = d.orig;
+    const cix = clamp(ix, 0, e.width), ciy = clamp(iy, 0, e.height);
+    if (d.which.includes("w")) x0 = cix;
+    if (d.which.includes("e")) x1 = cix;
+    if (d.which.includes("n")) y0 = ciy;
+    if (d.which.includes("s")) y1 = ciy;
+    det.bbox = [Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1)];
+    state.dirty = true;
+    requestDraw();
+  } else if (d.kind === "draw") {
+    const bx = clamp(ix, 0, e.width), by = clamp(iy, 0, e.height);
+    d.rect = [Math.min(d.ax, bx), Math.min(d.ay, by), Math.max(d.ax, bx), Math.max(d.ay, by)];
+    requestDraw();
+  }
+});
+
+cv.addEventListener("pointerup", ev => {
+  const d = dragState;
+  dragState = null;
+  cv.classList.remove("grabbing");
+  if (!d) return;
+  const e = curEntry();
+  if (d.kind === "maybe-pan") {
+    if (state.sel !== -1) { state.sel = -1; renderBoxlist(); renderFooter(); }
+    requestDraw();
+  } else if (d.kind === "draw" && d.rect && e) {
+    const [x0, y0, x1, y1] = d.rect.map(Math.round);
+    if (x1 - x0 >= 4 && y1 - y0 >= 4) {
+      const id = e.dets.reduce((m, x) => Math.max(m, x.id), 0) + 1;
+      e.dets.push({id, bbox: [x0, y0, x1, y1], score: null, label: null, source: "manual"});
+      state.sel = e.dets.length - 1;
+      state.dirty = true;
+      setMode("select");
+      updateRow(state.cur);
+      renderAll();
+    }
+    requestDraw();
+  } else if ((d.kind === "move" || d.kind === "resize") && e && state.sel >= 0) {
+    const det = e.dets[state.sel];
+    det.bbox = det.bbox.map(Math.round);
+    requestDraw();
+  }
+});
+
+cv.addEventListener("dblclick", ev => {
+  const [ix, iy] = toImage(ev.offsetX, ev.offsetY);
+  const i = hitBox(ix, iy);
+  if (i >= 0) { state.sel = i; zoomToBox(curEntry().dets[i]); renderBoxlist(); renderFooter(); }
+});
+
+cv.addEventListener("wheel", ev => {
+  if (!curEntry()) return;
+  ev.preventDefault();
+  const f = Math.exp(-ev.deltaY * (ev.deltaMode === 1 ? 0.05 : 0.0016));
+  zoomAt(ev.offsetX, ev.offsetY, f);
+}, {passive: false});
+
+/* ============================== keyboard ============================== */
+document.addEventListener("keydown", ev => {
+  if ($("help").open) return;
+  const t = ev.target;
+  const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+  if (typing) return;
+
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "s") { ev.preventDefault(); exportJSON(); return; }
+  if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+
+  const k = ev.key;
+  if (k === " ") { spaceDown = true; ev.preventDefault(); return; }
+  if (k >= "1" && k <= "9") {
+    const l = state.labels[+k - 1];
+    if (l) assign(l.name); else toast("no character on key " + k + " — add one on the right", "warn");
+    return;
+  }
+  if (k === "0") { assign(IGNORE); return; }
+
+  switch (k) {
+    case "Tab": {
+      ev.preventDefault();
+      const e = curEntry();
+      if (!e || !e.dets.length) break;
+      const dir = ev.shiftKey ? -1 : 1;
+      state.sel = ((state.sel < 0 ? (dir > 0 ? -1 : 0) : state.sel) + dir + e.dets.length) % e.dets.length;
+      ensureVisible(e.dets[state.sel]);
+      renderBoxlist(); renderFooter(); requestDraw();
+      break;
+    }
+    case "Enter": jumpNextUnlabeled(); break;
+    case "x": case "X": case "Delete": case "Backspace": ev.preventDefault(); deleteSel(); break;
+    case "u": case "U": undoDelete(); break;
+    case "b": case "B": setMode("draw"); break;
+    case "v": case "V": setMode("select"); break;
+    case "Escape":
+      if (state.mode === "draw") setMode("select");
+      else if (state.sel >= 0) { state.sel = -1; renderBoxlist(); renderFooter(); requestDraw(); }
+      break;
+    case "f": case "F": fitView(); requestDraw(); break;
+    case "z": case "Z": if (state.sel >= 0) zoomToBox(curEntry().dets[state.sel]); break;
+    case "n": case "N": case "PageDown": ev.preventDefault(); stepImage(1); break;
+    case "p": case "P": case "PageUp": ev.preventDefault(); stepImage(-1); break;
+    case "+": case "=": { const [w, h] = stageSize(); zoomAt(w / 2, h / 2, 1.25); break; }
+    case "-": case "_": { const [w, h] = stageSize(); zoomAt(w / 2, h / 2, 0.8); break; }
+    case "?": $("help").showModal(); break;
+    case "ArrowLeft": case "ArrowRight": case "ArrowUp": case "ArrowDown": {
+      ev.preventDefault();
+      const step = ev.shiftKey ? 10 : 1;
+      if (state.sel >= 0) {
+        nudgeSel(k === "ArrowLeft" ? -step : k === "ArrowRight" ? step : 0,
+                 k === "ArrowUp" ? -step : k === "ArrowDown" ? step : 0);
+      } else if (k === "ArrowLeft") stepImage(-1);
+      else if (k === "ArrowRight") stepImage(1);
+      break;
+    }
+  }
+});
+document.addEventListener("keyup", ev => { if (ev.key === " ") spaceDown = false; });
+
+function setMode(m) {
+  state.mode = m;
+  $("mSelect").classList.toggle("on", m === "select");
+  $("mDraw").classList.toggle("on", m === "draw");
+  $("fMode").textContent = m.toUpperCase();
+  cv.style.cursor = m === "draw" ? "crosshair" : "default";
+}
+
+/* ============================== rendering (dom) ============================== */
+function renderAll() { renderHeader(); renderRoster(); renderBoxlist(); renderFooter(); updateRow(state.cur); }
+
+function renderHeader() {
+  const e = curEntry();
+  $("fname").textContent = e ? e.relPath : "no image";
+  $("fname").title = e ? e.relPath : "";
+  $("fidx").textContent = (state.cur + 1) + "/" + state.images.length;
+  let tot = 0, done = 0, imgsDone = 0;
+  for (const im of state.images) {
+    const s = imgStats(im);
+    tot += s.total; done += s.done;
+    if (s.total > 0 && s.todo === 0) imgsDone++;
+  }
+  $("pnum").textContent = done; $("ptot").textContent = tot;
+  $("pimg").textContent = imgsDone; $("pimgtot").textContent = state.images.length;
+  $("pbar").style.width = (tot ? (100 * done / tot) : 0) + "%";
+}
+
+function renderFilmstrip() {
+  const list = $("filmlist");
+  list.textContent = "";
+  rowEls = [];
+  state.images.forEach((e, i) => {
+    const b = document.createElement("button");
+    b.className = "frow";
+    b.innerHTML = '<span class="num"></span><span class="name"></span><span class="st"></span>';
+    b.querySelector(".num").textContent = String(i + 1).padStart(3, "0");
+    b.querySelector(".name").textContent = e.fileName;
+    b.title = e.relPath;
+    b.addEventListener("click", () => selectImage(i));
+    list.appendChild(b);
+    rowEls.push(b);
+    updateRow(i);
+  });
+  $("filmcnt").textContent = state.images.length;
+}
+function updateRow(i) {
+  const b = rowEls[i], e = state.images[i];
+  if (!b || !e) return;
+  b.classList.toggle("cur", i === state.cur);
+  const st = b.querySelector(".st");
+  const s = imgStats(e);
+  if (!e.file) { st.textContent = "no file"; st.className = "st nofile"; }
+  else if (s.total === 0) { st.textContent = "0 box"; st.className = "st nofile"; }
+  else if (s.todo === 0) { st.textContent = "✓ " + s.total; st.className = "st done"; }
+  else if (s.done === 0) { st.textContent = s.todo + " left"; st.className = "st todo"; }
+  else { st.textContent = s.todo + " left"; st.className = "st part"; }
+  if (i === state.cur) b.scrollIntoView({block: "nearest"});
+}
+
+function renderRoster() {
+  const list = $("rosterlist");
+  list.textContent = "";
+  const counts = new Map();
+  let ignored = 0;
+  for (const e of state.images) for (const d of e.dets) {
+    if (d.label === IGNORE) ignored++;
+    else if (detDone(d)) counts.set(d.label, (counts.get(d.label) || 0) + 1);
+  }
+  state.labels.forEach((l, i) => {
+    const b = document.createElement("button");
+    b.className = "crow";
+    b.innerHTML = '<span class="key"></span><span class="sw"></span><span class="nm"></span><span class="ct"></span><span class="ren" title="Rename everywhere">✎</span><span class="del" title="Remove character">✕</span>';
+    b.querySelector(".key").textContent = i < 9 ? String(i + 1) : "·";
+    b.querySelector(".sw").style.background = l.color;
+    b.querySelector(".nm").textContent = l.name;
+    b.querySelector(".ct").textContent = counts.get(l.name) || 0;
+    b.title = "Assign " + l.name + (i < 9 ? " (key " + (i + 1) + ")" : "");
+    b.addEventListener("click", () => assign(l.name));
+    b.querySelector(".ren").addEventListener("click", ev => { ev.stopPropagation(); renameLabel(l); });
+    b.querySelector(".del").addEventListener("click", ev => { ev.stopPropagation(); removeLabel(l); });
+    list.appendChild(b);
+  });
+  const ig = document.createElement("button");
+  ig.className = "crow ignore";
+  ig.innerHTML = '<span class="key">0</span><span class="sw"></span><span class="nm">ignore / not a character</span><span class="ct"></span>';
+  ig.querySelector(".ct").textContent = ignored;
+  ig.title = "Background mob, mascot, false positive you still want to keep boxed (key 0)";
+  ig.addEventListener("click", () => assign(IGNORE));
+  list.appendChild(ig);
+  $("rostercnt").textContent = state.labels.length;
+}
+
+function renderBoxlist() {
+  const list = $("boxlist");
+  list.textContent = "";
+  const e = curEntry();
+  if (!e) { $("boxcnt").textContent = 0; return; }
+  e.dets.forEach((d, i) => {
+    const b = document.createElement("button");
+    b.className = "brow" + (i === state.sel ? " sel" : "");
+    b.innerHTML = '<span class="bid"></span><span class="chip"></span><span class="sc"></span>';
+    b.querySelector(".bid").textContent = "#" + d.id;
+    const chip = b.querySelector(".chip");
+    if (detDone(d)) {
+      chip.textContent = d.label === IGNORE ? "ignore" : d.label;
+      chip.style.background = d.label === IGNORE ? "#7d8697" : labelColor(d.label);
+    } else {
+      chip.textContent = "unlabeled";
+      chip.className = "chip none";
+    }
+    b.querySelector(".sc").textContent = d.score != null ? Number(d.score).toFixed(2) : "manual";
+    b.addEventListener("click", () => {
+      state.sel = i; ensureVisible(d); renderBoxlist(); renderFooter(); requestDraw();
+    });
+    b.addEventListener("dblclick", () => zoomToBox(d));
+    b.addEventListener("mouseenter", () => { state.hover = i; requestDraw(); });
+    b.addEventListener("mouseleave", () => { state.hover = -1; requestDraw(); });
+    list.appendChild(b);
+  });
+  $("boxcnt").textContent = e.dets.length;
+}
+
+function renderFooter() {
+  const e = curEntry();
+  const d = e && state.sel >= 0 ? e.dets[state.sel] : null;
+  $("fSel").textContent = d
+    ? "box #" + d.id + " · " + Math.round(d.bbox[2] - d.bbox[0]) + "×" + Math.round(d.bbox[3] - d.bbox[1]) +
+      (detDone(d) ? " · " + (d.label === IGNORE ? "ignore" : d.label) : " · unlabeled")
+    : "no box selected";
+}
+
+function checkEmpty() {
+  $("empty").classList.toggle("hide", state.images.length > 0);
+}
+
+/* ============================== wiring ============================== */
+$("btnJson").addEventListener("click", () => $("inJson").click());
+$("btnDir").addEventListener("click", () => $("inDir").click());
+$("eJson").addEventListener("click", () => $("inJson").click());
+$("btnImgs").addEventListener("click", () => $("inImgs").click());
+$("eImgs").addEventListener("click", () => $("inImgs").click());
+$("eDir").addEventListener("click", () => $("inDir").click());
+$("btnExport").addEventListener("click", exportJSON);
+$("btnHelp").addEventListener("click", () => $("help").showModal());
+$("helpX").addEventListener("click", () => $("help").close());
+$("prevImg").addEventListener("click", () => stepImage(-1));
+$("nextImg").addEventListener("click", () => stepImage(1));
+$("mSelect").addEventListener("click", () => setMode("select"));
+$("mDraw").addEventListener("click", () => setMode("draw"));
+$("zIn").addEventListener("click", () => { const [w, h] = stageSize(); zoomAt(w / 2, h / 2, 1.25); });
+$("zOut").addEventListener("click", () => { const [w, h] = stageSize(); zoomAt(w / 2, h / 2, 0.8); });
+$("zFit").addEventListener("click", () => { fitView(); requestDraw(); });
+
+async function routeFiles(files) {
+  const jsons = files.filter(f => f.name.toLowerCase().endsWith(".json"));
+  const imgs = files.filter(f => f.type.startsWith("image/"));
+  if (jsons.length) {
+    // newest first — a moved-back annotations_labeled.json beats the raw step-1 file
+    jsons.sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0));
+    let loaded = false;
+    for (const j of jsons) {
+      if (loadJsonText(await j.text(), j.name)) {
+        loaded = true;
+        if (jsons.length > 1) toast("using " + j.name + " — " + (jsons.length - 1) + " other JSON file(s) ignored");
+        break;
+      }
+    }
+    if (!loaded && !imgs.length) return;
+  }
+  if (imgs.length) addImageFiles(imgs);
+  else if (!jsons.length) toast("no JSON or image files found", "warn");
+}
+$("inJson").addEventListener("change", ev => { routeFiles([...ev.target.files]); ev.target.value = ""; });
+$("inImgs").addEventListener("change", ev => { routeFiles([...ev.target.files]); ev.target.value = ""; });
+$("inDir").addEventListener("change", ev => { routeFiles([...ev.target.files]); ev.target.value = ""; });
+
+function addFromInput() {
+  const name = $("addName").value;
+  const l = addLabel(name);
+  if (l) {
+    $("addName").value = "";
+    if (state.sel >= 0 && curEntry() && !detDone(curEntry().dets[state.sel])) assign(l.name);
+  }
+}
+$("addBtn").addEventListener("click", addFromInput);
+$("addName").addEventListener("keydown", ev => {
+  if (ev.key === "Enter") { ev.preventDefault(); addFromInput(); }
+  if (ev.key === "Escape") { $("addName").value = ""; $("addName").blur(); }
+});
+
+/* drag & drop (files and folders) */
+let dragDepth = 0;
+window.addEventListener("dragenter", ev => { ev.preventDefault(); dragDepth++; document.body.classList.add("dragging"); });
+window.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove("dragging"); } });
+window.addEventListener("dragover", ev => ev.preventDefault());
+window.addEventListener("drop", async ev => {
+  ev.preventDefault();
+  dragDepth = 0;
+  document.body.classList.remove("dragging");
+  const items = [...(ev.dataTransfer.items || [])];
+  const files = [];
+  const walk = entry => new Promise(res => {
+    if (entry.isFile) {
+      entry.file(f => { f._relPath = entry.fullPath.replace(/^\//, ""); files.push(f); res(); }, () => res());
+    } else if (entry.isDirectory) {
+      const rd = entry.createReader();
+      const readAll = () => rd.readEntries(async ents => {
+        if (!ents.length) return res();
+        await Promise.all(ents.map(walk));
+        readAll();
+      }, () => res());
+      readAll();
+    } else res();
+  });
+  const entries = items.map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  if (entries.length) await Promise.all(entries.map(walk));
+  else files.push(...ev.dataTransfer.files);
+
+  if (!files.length) { toast("drop a .json manifest or image files", "warn"); return; }
+  routeFiles(files);
+});
+
+document.addEventListener("click", ev => {
+  const b = ev.target.closest("button");
+  if (b) b.blur();   // keep Enter/Space on the bench shortcuts, not on the last-clicked button
+});
+
+window.addEventListener("beforeunload", ev => {
+  if (state.dirty) { ev.preventDefault(); ev.returnValue = ""; }
+});
+
+/* boot */
+setMode("select");
+renderAll();
+checkEmpty();
+</script>
+</body>
+</html>
