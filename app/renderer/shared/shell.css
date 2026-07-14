@@ -1,0 +1,102 @@
+:root{
+  --bg:#0e1116; --panel:#151920; --panel2:#191e27;
+  --line:#252c37; --line2:#303945;
+  --ink:#e9e6de; --muted:#8b93a1; --dim:#5d6572;
+  --accent:#ffb454; --accent-ink:#160f04;
+  --red:#ff5d5d; --green:#77d98b;
+  --mono:ui-monospace,"Cascadia Mono","JetBrains Mono","SFMono-Regular",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font:13px/1.45 var(--mono);
+  overflow:hidden;
+}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:#2b323e;border-radius:9px;border:2px solid var(--panel)}
+::-webkit-scrollbar-track{background:transparent}
+
+.shell{display:flex; flex-direction:column; height:100vh}
+
+.shell-tabbar{
+  flex:0 0 auto; display:flex; align-items:center; gap:4px;
+  padding:0 10px; height:40px;
+  background:linear-gradient(180deg,var(--panel2),var(--panel));
+  border-bottom:1px solid var(--line);
+  -webkit-app-region:drag;
+}
+.shell-wordmark{
+  font-weight:800; letter-spacing:.12em; font-size:12px; color:var(--dim);
+  margin-right:14px; user-select:none;
+}
+.shell-wordmark b{color:var(--accent)}
+.shell-tab{
+  -webkit-app-region:no-drag;
+  font:inherit; font-weight:700; letter-spacing:.06em; font-size:12px;
+  color:var(--muted); background:none; border:none; cursor:pointer;
+  padding:8px 16px; border-radius:6px 6px 0 0;
+}
+.shell-tab:hover{color:var(--ink); background:#1b212b}
+.shell-tab.active{color:var(--accent-ink); background:var(--accent)}
+
+.shell-views{flex:1 1 auto; min-height:0; position:relative}
+.shell-view{position:absolute; inset:0; overflow:auto; display:none}
+.shell-view.active{display:block}
+
+/* generic building blocks reused by the Detect / Export views (kept
+   separate from annotate.css's #view-annotate-scoped .btn/.panel names) */
+.pane{padding:22px; max-width:760px; margin:0 auto}
+.card{
+  background:var(--panel); border:1px solid var(--line); border-radius:10px;
+  padding:18px; margin-bottom:16px;
+}
+.card h2{font-size:12px; letter-spacing:.1em; color:var(--dim); margin:0 0 14px; text-transform:uppercase}
+.field{display:flex; flex-direction:column; gap:5px; margin-bottom:12px}
+.field label{font-size:11px; color:var(--muted); letter-spacing:.03em}
+.row{display:flex; gap:10px; align-items:center}
+.row.wrap{flex-wrap:wrap}
+input[type=text], input[type=number], input[type=password], select{
+  font:inherit; color:var(--ink); background:var(--panel2);
+  border:1px solid var(--line2); border-radius:6px; padding:7px 9px;
+}
+input[type=range]{flex:1}
+.s3-btn{
+  font:inherit; font-weight:700; letter-spacing:.03em; font-size:12px;
+  color:var(--ink); background:var(--panel2); border:1px solid var(--line2);
+  border-radius:6px; padding:8px 14px; cursor:pointer;
+}
+.s3-btn:hover{border-color:var(--accent)}
+.s3-btn.primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent)}
+.s3-btn:disabled{opacity:.5; cursor:default}
+.pathrow{
+  display:flex; gap:8px; align-items:center;
+  background:var(--panel2); border:1px solid var(--line2); border-radius:6px;
+  padding:7px 9px; font-size:12px; color:var(--muted);
+}
+.pathrow span{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.progress-outer{height:8px; background:var(--panel2); border-radius:4px; overflow:hidden}
+.progress-inner{height:100%; background:var(--accent); width:0%; transition:width .15s}
+.log{
+  background:#0a0c10; border:1px solid var(--line); border-radius:6px;
+  padding:8px 10px; font-size:11.5px; color:var(--muted);
+  max-height:180px; overflow:auto; white-space:pre-wrap;
+}
+.gpu-meter{display:flex; gap:8px; align-items:center; font-size:11.5px; color:var(--muted)}
+.gpu-bar{flex:1; height:6px; background:var(--panel2); border-radius:3px; overflow:hidden}
+.gpu-bar i{display:block; height:100%; background:var(--green)}
+.badge{
+  display:inline-block; font-size:10.5px; font-weight:700; letter-spacing:.05em;
+  padding:2px 7px; border-radius:4px; background:var(--panel2); color:var(--muted);
+}
+.badge.ok{background:#183a24; color:var(--green)}
+.badge.warn{background:#3a2b18; color:var(--accent)}
+.hint{font-size:11.5px; color:var(--dim)}
+
+#shell-toasts{position:fixed; right:14px; bottom:14px; display:flex; flex-direction:column; gap:6px; z-index:9999}
+.shell-toast{
+  background:var(--panel2); border:1px solid var(--line2); border-radius:6px;
+  padding:8px 12px; font-size:12px; color:var(--ink); box-shadow:0 4px 14px rgba(0,0,0,.4);
+}
+.shell-toast.ok{border-color:var(--green); color:var(--green)}
+.shell-toast.warn{border-color:var(--accent); color:var(--accent)}

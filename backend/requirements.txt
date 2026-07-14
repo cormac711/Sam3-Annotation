@@ -1,0 +1,14 @@
+# CUDA-enabled torch wheels live on PyTorch's own index, not PyPI -- without
+# this, pip silently resolves the CPU-only build on Windows and the whole
+# point of this backend (GPU batch detection) is gone. Bump cu130 if/when a
+# newer CUDA toolchain version is the current PyTorch release.
+--extra-index-url https://download.pytorch.org/whl/cu130
+torch
+torchvision
+transformers>=5.0.0
+pillow
+pycocotools
+huggingface_hub
+fastapi
+uvicorn[standard]
+pydantic

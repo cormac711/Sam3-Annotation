@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sam3 Annotation</title>
+<link rel="stylesheet" href="shared/shell.css">
+<link rel="stylesheet" href="annotate/annotate.css">
+</head>
+<body>
+<div class="shell">
+  <nav class="shell-tabbar">
+    <span class="shell-wordmark">SAM<b>3</b> ANNOTATION</span>
+    <button class="shell-tab" data-view="detect">DETECT</button>
+    <button class="shell-tab" data-view="annotate">ANNOTATE</button>
+    <button class="shell-tab" data-view="export">EXPORT</button>
+  </nav>
+  <div class="shell-views">
+    <section id="tab-detect" class="shell-view">
+<div class="pane">
+
+  <div class="card" id="hfCard" style="display:none">
+    <h2>Hugging Face authorization</h2>
+    <p class="hint">SAM&nbsp;3 is a gated model. Request access once at
+      <span style="color:var(--accent)">huggingface.co/facebook/sam3</span>, then paste an access token below
+      (or run <code>hf auth login</code> in a terminal).</p>
+    <div class="row" style="margin-top:10px">
+      <input type="password" id="hfToken" placeholder="hf_..." style="flex:1">
+      <button class="s3-btn primary" id="hfLoginBtn">AUTHORIZE</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>GPU</h2>
+    <div class="gpu-meter">
+      <span id="gpuName">checking…</span>
+      <div class="gpu-bar"><i id="gpuBarFill" style="width:0%"></i></div>
+      <span id="gpuNums">—</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Source</h2>
+    <div class="field">
+      <label>Image folder</label>
+      <div class="pathrow">
+        <span id="srcFolder">no folder selected</span>
+        <button class="s3-btn" id="pickFolderBtn">BROWSE…</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Concept prompt</label>
+      <input type="text" id="prompt" value="person">
+    </div>
+    <div class="row wrap">
+      <div class="field" style="flex:1; min-width:160px">
+        <label>Detection threshold: <span id="thresholdLabel">0.50</span></label>
+        <input type="range" id="threshold" min="0.05" max="0.95" step="0.05" value="0.5">
+      </div>
+      <div class="field" style="flex:1; min-width:160px">
+        <label>Mask threshold: <span id="maskThresholdLabel">0.50</span></label>
+        <input type="range" id="maskThreshold" min="0.05" max="0.95" step="0.05" value="0.5">
+      </div>
+    </div>
+    <div class="row wrap" style="gap:18px">
+      <label class="row"><input type="checkbox" id="recursive"> scan subfolders</label>
+      <label class="row"><input type="checkbox" id="saveMasks" checked> segmentation masks</label>
+      <label class="row"><input type="checkbox" id="noResume"> redo already-detected images</label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Batch &amp; VRAM</h2>
+    <div class="row wrap">
+      <div class="field" style="flex:1; min-width:140px">
+        <label>Device</label>
+        <select id="device">
+          <option value="auto">Auto</option>
+          <option value="cuda">CUDA (GPU)</option>
+          <option value="cpu">CPU</option>
+        </select>
+      </div>
+      <div class="field" style="flex:1; min-width:140px">
+        <label>Precision</label>
+        <select id="precision">
+          <option value="fp16">fp16 (fast, default)</option>
+          <option value="bf16">bf16</option>
+          <option value="fp32">fp32 (safest, slowest)</option>
+        </select>
+      </div>
+      <div class="field" style="flex:1; min-width:160px">
+        <label>Batch size: <span id="batchSizeLabel">4</span> images/pass</label>
+        <input type="range" id="batchSize" min="1" max="32" step="1" value="4">
+      </div>
+    </div>
+    <div class="row wrap" style="gap:18px">
+      <label class="row"><input type="checkbox" id="vramLimitEnabled"> cap VRAM usage at</label>
+      <input type="number" id="vramLimitMb" value="8000" min="512" step="256" style="width:100px" disabled> MB
+      <label class="row" title="Needs a working Triton install (spotty on Windows). If it's not available, this silently falls back to normal (uncompiled) speed instead of failing the job."><input type="checkbox" id="compileModel"> torch.compile (slower first batch, faster after -- needs Triton)</label>
+    </div>
+    <p class="hint">If a batch runs out of VRAM, the batch size is automatically halved and retried — no crash, no lost progress.</p>
+  </div>
+
+  <div class="card">
+    <h2>Run</h2>
+    <div class="row" style="margin-bottom:12px">
+      <button class="s3-btn primary" id="runBtn">RUN DETECTION</button>
+      <button class="s3-btn" id="cancelBtn" disabled>CANCEL</button>
+      <button class="s3-btn" id="unloadBtn">RELEASE VRAM</button>
+      <span class="badge" id="runStatus">idle</span>
+    </div>
+    <div class="progress-outer" style="margin-bottom:8px"><div class="progress-inner" id="detectProgressBar"></div></div>
+    <div class="row" style="margin-bottom:8px">
+      <span class="hint" id="detectProgressLabel">—</span>
+    </div>
+    <div class="log" id="detectLog"></div>
+    <div class="row" style="margin-top:12px; display:none" id="detectDoneRow">
+      <button class="s3-btn primary" id="openAnnotateBtn">OPEN IN ANNOTATE →</button>
+      <button class="s3-btn" id="openFolderBtn">OPEN FOLDER</button>
+    </div>
+  </div>
+
+</div>
+    </section>
+    <section id="tab-annotate" class="shell-view">
+      <div id="view-annotate">
+
+<header>
+  <div class="wordmark">CAST<span class="slash">/</span>LIST<small>character labeling bench</small></div>
+  <div class="imgnav">
+    <button class="navbtn" id="prevImg" title="Previous image (P)">◀</button>
+    <span class="fname" id="fname">no image</span>
+    <span class="idx" id="fidx">0/0</span>
+    <button class="navbtn" id="nextImg" title="Next image (N)">▶</button>
+  </div>
+  <div class="progress" title="labeled boxes / total boxes">
+    <div class="bar"><i id="pbar"></i></div>
+    <span class="nums"><b id="pnum">0</b>/<span id="ptot">0</span> boxes · <b id="pimg">0</b>/<span id="pimgtot">0</span> imgs</span>
+  </div>
+  <div class="hbtns">
+    <button class="btn" id="btnDir" title="Load an image folder — the annotations.json inside is picked up automatically">FOLDER</button>
+    <button class="btn" id="btnJson" title="Load an annotations JSON by itself (COCO; legacy files are migrated)">JSON</button>
+    <button class="btn" id="btnImgs" title="Load loose image files">IMAGES</button>
+    <button class="btn primary" id="btnExport" title="Export labeled JSON (Ctrl+S)">EXPORT</button>
+    <button class="btn" id="btnHelp" title="Shortcuts (?)">?</button>
+  </div>
+</header>
+
+<main>
+  <aside id="filmstrip">
+    <div class="paneltitle"><span>IMAGES</span><span class="cnt" id="filmcnt">0</span></div>
+    <div class="filmfilter">
+      <input id="filmFilter" type="text" placeholder="filter: naruto AND sakura, NOT ignore…" autocomplete="off" spellcheck="false" title="Filter images by label — combine up to 4 labels with AND / OR / NOT">
+    </div>
+    <div id="filmlist"></div>
+  </aside>
+
+  <section id="stage">
+    <canvas id="cv"></canvas>
+
+    <div class="hud-vert hud-vert-left" id="toolBar">
+      <span class="hud-cap-v">TOOL</span>
+      <button id="mSelect" class="on icon-btn" title="Select / move / resize (V)">
+        <svg viewBox="0 0 20 20"><path fill="currentColor" d="M4 2.6 16.4 9.8 10.5 11.2 8.5 17 4 2.6Z"/></svg>
+      </button>
+      <button id="mDraw" class="icon-btn" title="Draw a new box (B)">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="5" width="12" height="10" rx="1.4" stroke-dasharray="3 2.3"/></svg>
+      </button>
+      <button id="mMask" class="icon-btn" title="Paint / erase the selected box's mask (M) — right-click or Alt to erase">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15.6 2.4a2 2 0 0 1 2.8 2.8L9.2 14.4l-4 1.2 1.2-4 9.2-9.2Z"/><path d="M5.2 15.6c-.9.9-2.3 1.1-3.4.6"/></svg>
+      </button>
+      <button id="mPen" class="icon-btn" title="Edit the mask outline point-by-point (O) — drag a point, click an edge to add one, Delete removes a hovered point">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 3 17 6.5l-8.3 8.3-4.4 1.1 1.1-4.4L13.5 3Z"/><path d="M11.5 5 15 8.5"/></svg>
+      </button>
+      <button id="mNewPath" class="icon-btn" title="Draw a brand-new independent selection (I) — click to place points, click the start point (or Enter) to close, then Replace/Merge/Subtract">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M10 3 16 14H4L10 3Z" stroke-dasharray="2.4 2.1"/><path stroke-linecap="round" d="M10 9v4M8 11h4"/></svg>
+      </button>
+    </div>
+
+    <div class="hud-vert hud-vert-right" id="viewBar">
+      <span class="hud-cap-v">VIEW</span>
+      <button id="vBoth" class="on icon-btn" title="Show boxes and masks">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3.3" y="3.3" width="9.6" height="9.6" rx="1.3"/><circle cx="12.6" cy="12.6" r="4.1" fill="currentColor" fill-opacity=".4" stroke="none"/></svg>
+      </button>
+      <button id="vBox" class="icon-btn" title="Show boxes only">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="12" height="12" rx="1.4" stroke-dasharray="3 2.2"/></svg>
+      </button>
+      <button id="vMask" class="icon-btn" title="Show masks only">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 3c3.4 0 6 2.8 6 6.1 0 3.5-2.9 6.8-6 7.6-3.1-.8-6-4.1-6-7.6C4 5.8 6.6 3 10 3Z"/></svg>
+      </button>
+      <span class="hud-divider-v"></span>
+      <button id="toggleFocus" class="on icon-btn" title="Focus mode: ON — selecting a box hides the rest. Click to show every character all the time instead.">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="6.4"/><circle cx="10" cy="10" r="2.2" fill="currentColor" stroke="none"/></svg>
+      </button>
+    </div>
+
+    <div class="hud hud-top">
+      <div class="hud-group">
+        <span class="hud-cap">BRUSH</span>
+        <button id="brDown" title="Smaller brush ([)">−</button>
+        <span class="zl" id="brLabel">24px</span>
+        <button id="brUp" title="Bigger brush (])">＋</button>
+        <button id="mClearMask" title="Clear the selected box's mask">CLEAR</button>
+        <button id="mFillHoles" title="Fill any unmasked gaps fully enclosed inside the selected mask">FILL HOLES</button>
+      </div>
+      <div class="hud-group">
+        <span class="hud-cap">ZOOM</span>
+        <button id="zOut" title="Zoom out (−)">−</button>
+        <span class="zl" id="zLabel">100%</span>
+        <button id="zIn" title="Zoom in (+)">＋</button>
+        <button id="zFit" title="Fit image (F)">FIT</button>
+      </div>
+    </div>
+    <div id="empty">
+      <div class="mark">CAST<span class="slash">/</span>LIST</div>
+      <p>Put a name to every detected character. Point <span style="font-family:var(--mono)">1_detect.py</span>
+        at your image folder — SAM&nbsp;3 writes a COCO <b>annotations.json</b> into it — then load that
+        folder here: boxes and images arrive together. Click a box, press a number key, repeat.</p>
+      <div class="steps">
+        <button class="bigbtn" id="eDir"><b>1.</b> Load the image folder<span class="sub">annotations.json inside loads automatically</span></button>
+        <button class="bigbtn" id="eJson">Load a JSON only</button>
+        <button class="bigbtn" id="eImgs">Load image files only</button>
+      </div>
+      <div class="drop">— OR DRAG &amp; DROP THE FOLDER ANYWHERE —</div>
+    </div>
+  </section>
+
+  <aside id="panel">
+    <section id="roster">
+      <div class="paneltitle"><span>CAST</span><span class="cnt" id="rostercnt">0</span></div>
+      <div class="addrow">
+        <input id="addName" type="text" placeholder="add character… (Enter)" autocomplete="off" spellcheck="false">
+        <button class="btn" id="addBtn">ADD</button>
+      </div>
+      <div id="rosterlist"></div>
+      <div class="hintline">Click a name (or press its key) to assign it to the selected box. Hover a name for rename ✎ and remove ✕.</div>
+    </section>
+    <section id="boxes">
+      <div class="paneltitle"><span>BOXES · THIS IMAGE</span><span class="cnt" id="boxcnt">0</span></div>
+      <div id="boxlist"></div>
+    </section>
+  </aside>
+</main>
+
+<footer>
+  <span class="mode" id="fMode">SELECT</span>
+  <span class="coords" id="fCoords">—</span>
+  <span id="fSel">no box selected</span>
+  <span class="hint">assign <kbd>1</kbd>–<kbd>9</kbd> · ignore <kbd>0</kbd> · next unlabeled <kbd>Enter</kbd> · cycle <kbd>Tab</kbd> · delete <kbd>X</kbd> · draw <kbd>B</kbd> · mask <kbd>M</kbd> · pen <kbd>O</kbd> · new path <kbd>I</kbd> · undo <kbd>Ctrl</kbd>+<kbd>Z</kbd> · image <kbd>←</kbd><kbd>→</kbd> · help <kbd>?</kbd></span>
+</footer>
+
+<div id="toasts"></div>
+
+<dialog id="help">
+  <button class="x" id="helpX" title="Close">✕</button>
+  <h2>CAST<span style="color:var(--accent)">/</span>LIST</h2>
+  <p>Step 2 of the pipeline: turn anonymous SAM&nbsp;3 boxes into named characters.
+     Load your image folder — the COCO <b>annotations.json</b> that <b>1_detect.py</b> wrote into it
+     is picked up automatically. Label every box, then <b>EXPORT</b> (COCO format) and feed the
+     result to <b>3_export.py</b>. The export is also your save file — load it back any time to resume.</p>
+  <h3>LABELING</h3>
+  <div class="keys">
+    <kbd>1</kbd>–<kbd>9</kbd><span>assign character to selected box</span>
+    <kbd>0</kbd><span>mark as ignore / not a character</span>
+    <kbd>Enter</kbd><span>jump to next unlabeled box</span>
+    <kbd>Tab</kbd><span>cycle boxes in this image</span>
+    <kbd>X</kbd><span>delete selected box (false positive) — or a hovered pen point in PEN mode</span>
+    <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>U</kbd><span>undo last action — box move/resize, delete, mask edit, or pen edit</span>
+  </div>
+  <h3>BOXES</h3>
+  <div class="keys">
+    <kbd>B</kbd><span>draw a missed box (drag)</span>
+    <kbd>V</kbd> / <kbd>Esc</kbd><span>back to select / deselect</span>
+    <kbd>Alt</kbd>+<kbd>←↑↓→</kbd><span>nudge selected box (Shift = ×10)</span>
+    <span style="grid-column:span 2;color:var(--dim)">drag inside a box to move it, drag its handles to resize</span>
+  </div>
+  <h3>SEGMENTATION — BRUSH</h3>
+  <div class="keys">
+    <kbd>M</kbd><span>paint/erase the selected box's mask</span>
+    <kbd>drag</kbd><span>paint (add to mask)</span>
+    <kbd>right-drag</kbd> / <kbd>Alt</kbd>+drag<span>erase</span>
+    <kbd>[</kbd> / <kbd>]</kbd><span>shrink / grow brush</span>
+    <span style="grid-column:span 2;color:var(--dim)">SAM&nbsp;3 masks load in automatically (COCO RLE); a box without one gets a
+      blank mask the first time you paint on it. CLEAR wipes it, FILL HOLES fills any fully-enclosed gaps.</span>
+  </div>
+  <h3>SEGMENTATION — PEN</h3>
+  <div class="keys">
+    <kbd>O</kbd><span>edit the mask outline point-by-point (needs an existing mask)</span>
+    <kbd>drag point</kbd><span>reshape the outline (drag any selected point to move the whole group)</span>
+    <kbd>drag empty area</kbd><span>marquee-select multiple points</span>
+    <kbd>click edge</kbd><span>insert a new point there</span>
+    <kbd>X</kbd> / <kbd>Delete</kbd><span>remove the hovered or marquee-selected point(s)</span>
+    <kbd>Alt</kbd>+right-click<span>delete that point directly</span>
+    <kbd>I</kbd><span>NEW PATH — draw an independent new shape from scratch</span>
+    <span style="grid-column:span 2;color:var(--dim)">In NEW PATH: click to place points, click the start point (or press Enter) to
+      close the loop, then choose Replace / Merge / Subtract for the box's mask. Esc cancels the in-progress path.</span>
+  </div>
+  <h3>VIEW & FILES</h3>
+  <div class="keys">
+    <kbd>wheel</kbd><span>zoom at cursor</span>
+    <kbd>drag</kbd><span>pan (empty area or hold Space)</span>
+    <kbd>F</kbd><span>fit image</span>
+    <kbd>Z</kbd><span>zoom to selected box</span>
+    <kbd>←→↑↓</kbd> / <kbd>N</kbd><kbd>P</kbd><span>next / previous image</span>
+    <kbd>Ctrl</kbd>+<kbd>S</kbd><span>export labeled JSON</span>
+    <span style="grid-column:span 2;color:var(--dim)">BOTH / BOXES / MASKS in the view HUD switch what's drawn on the canvas — labeling still works in any view.</span>
+  </div>
+  <h3>FILTER IMAGES</h3>
+  <div class="keys">
+    <span style="grid-column:span 2;color:var(--dim)">The box above the filmstrip filters which images are listed, by which character labels they
+      contain — up to 4 terms combined with AND / OR / NOT (left to right, no parentheses).
+      Also matches the special labels <b>ignore</b> and <b>unlabeled</b>.</span>
+    <kbd>naruto AND sakura</kbd><span>images with both</span>
+    <kbd>naruto OR sakura</kbd><span>images with either</span>
+    <kbd>NOT ignore</kbd><span>images with no ignore boxes</span>
+    <kbd>naruto AND NOT mob</kbd><span>images with naruto but no "mob"</span>
+  </div>
+</dialog>
+
+<dialog id="pathResolve">
+  <h2>NEW PATH — box <span id="prName"></span></h2>
+  <p>What should this new shape do to the box's mask?</p>
+  <div class="pathBtns">
+    <button class="btn primary" id="prReplace">REPLACE</button>
+    <button class="btn" id="prMerge">MERGE (union)</button>
+    <button class="btn" id="prSubtract">SUBTRACT</button>
+    <button class="btn" id="prCancel">CANCEL</button>
+  </div>
+</dialog>
+
+<input type="file" id="inJson" accept=".json,application/json" hidden>
+<input type="file" id="inImgs" accept="image/*" multiple hidden>
+<input type="file" id="inDir" webkitdirectory hidden>
+
+      </div>
+    </section>
+    <section id="tab-export" class="shell-view">
+<div class="pane">
+
+  <div class="card">
+    <h2>Source</h2>
+    <div class="field">
+      <label>Labeled annotations JSON (COCO, exported from Annotate)</label>
+      <div class="pathrow">
+        <span id="expAnnotations">no file selected</span>
+        <button class="s3-btn" id="pickAnnotationsBtn">BROWSE…</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Images folder (defaults to the JSON's own folder)</label>
+      <div class="pathrow">
+        <span id="expImagesDir">(same as JSON)</span>
+        <button class="s3-btn" id="pickImagesDirBtn">BROWSE…</button>
+        <button class="s3-btn" id="clearImagesDirBtn">CLEAR</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Output dataset folder</label>
+      <div class="pathrow">
+        <span id="expOut">no folder selected</span>
+        <button class="s3-btn" id="pickOutBtn">BROWSE…</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Dataset format</h2>
+    <div class="row wrap" style="gap:18px; margin-bottom:12px">
+      <label class="row"><input type="radio" name="format" value="both" checked> both</label>
+      <label class="row"><input type="radio" name="format" value="yolo"> YOLO only</label>
+      <label class="row"><input type="radio" name="format" value="crops"> crops only</label>
+    </div>
+    <div class="row wrap">
+      <div class="field" style="flex:1; min-width:140px">
+        <label>Validation ratio</label>
+        <input type="number" id="valRatio" value="0.1" min="0" max="0.9" step="0.05">
+      </div>
+      <div class="field" style="flex:1; min-width:140px">
+        <label>Crop padding</label>
+        <input type="number" id="pad" value="0.05" min="0" max="0.5" step="0.01">
+      </div>
+      <div class="field" style="flex:1; min-width:140px">
+        <label>Min crop size (px)</label>
+        <input type="number" id="minCrop" value="32" min="1" step="1">
+      </div>
+      <div class="field" style="flex:1; min-width:140px">
+        <label>Split seed</label>
+        <input type="number" id="seed" value="42" step="1">
+      </div>
+    </div>
+    <label class="row"><input type="checkbox" id="link"> symlink images into the YOLO set instead of copying</label>
+  </div>
+
+  <div class="card">
+    <h2>Run</h2>
+    <div class="row" style="margin-bottom:12px">
+      <button class="s3-btn primary" id="exportRunBtn">EXPORT</button>
+      <span class="badge" id="exportStatus">idle</span>
+    </div>
+    <div class="progress-outer" style="margin-bottom:8px"><div class="progress-inner" id="exportProgressBar"></div></div>
+    <div class="row" style="margin-bottom:8px"><span class="hint" id="exportProgressLabel">—</span></div>
+    <div class="log" id="exportLog"></div>
+    <div class="row" style="margin-top:12px; display:none" id="exportDoneRow">
+      <button class="s3-btn primary" id="openDatasetBtn">OPEN DATASET FOLDER</button>
+    </div>
+  </div>
+
+</div>
+    </section>
+  </div>
+</div>
+
+<div id="shell-toasts"></div>
+
+<script type="module">
+  import { initBackend, initTabs } from "./shared/shell.js";
+  import { initDetect } from "./detect/detect.js";
+  import { initExport } from "./export/export.js";
+
+  (async () => {
+    await initBackend();
+    initTabs("detect");
+    initDetect();
+    initExport();
+  })();
+</script>
+<script src="annotate/annotate.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+backend/.venv/
+backend/build/
+backend/dist/
+
+# Node / Electron
+app/node_modules/
+app/dist/
+
+# local test/output artifacts
+previews/
+dataset/
+*.annotations.json.bak

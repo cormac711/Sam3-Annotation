@@ -60,7 +60,7 @@ def clamp_xyxy(x0, y0, x1, y1, w, h):
     return x0, y0, x1, y1
 
 
-def main():
+def build_arg_parser():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("annotations", help="COCO JSON (labeled export from the app)")
@@ -78,21 +78,27 @@ def main():
                     help="skip crops smaller than this many px on a side (default 32)")
     ap.add_argument("--link", action="store_true",
                     help="symlink images into the YOLO set instead of copying")
-    args = ap.parse_args()
+    return ap
 
+
+def run(args, progress_cb=None):
+    """Core export logic. Raises ValueError on bad input (caller decides how
+    to surface that -- the CLI turns it into sys.exit, the app backend turns
+    it into an HTTP error). Returns a summary dict. `progress_cb(done, total)`
+    is called periodically if provided."""
     ann_path = Path(args.annotations)
     data = json.loads(ann_path.read_text(encoding="utf-8"))
 
     if "annotations" not in data and any("detections" in im for im in data.get("images", [])):
-        sys.exit("this looks like the old (pre-COCO) manifest format — open it in "
-                 "2_annotate.html and hit EXPORT to migrate it, then re-run")
+        raise ValueError("this looks like the old (pre-COCO) manifest format — open it in "
+                         "2_annotate.html and hit EXPORT to migrate it, then re-run")
     for key in ("images", "annotations", "categories"):
         if not isinstance(data.get(key), list):
-            sys.exit(f"not a COCO file: missing '{key}' list")
+            raise ValueError(f"not a COCO file: missing '{key}' list")
 
     images_dir = Path(args.images_dir) if args.images_dir else ann_path.resolve().parent
     if not images_dir.is_dir():
-        sys.exit(f"--images-dir is not a directory: {images_dir}")
+        raise ValueError(f"--images-dir is not a directory: {images_dir}")
     out = Path(args.out)
 
     cat_name = {c["id"]: str(c["name"]).strip() for c in data["categories"]}
@@ -112,7 +118,7 @@ def main():
         else:
             counts[name] += 1
     if not counts:
-        sys.exit("no character-labeled boxes found — label boxes in 2_annotate.html first")
+        raise ValueError("no character-labeled boxes found — label boxes in 2_annotate.html first")
 
     classes = sorted(counts)
     class_id = {c: i for i, c in enumerate(classes)}
@@ -158,7 +164,10 @@ def main():
 
     missing, yolo_boxes, yolo_imgs, crop_count, skipped_small = [], 0, 0, 0, 0
 
-    for im in data["images"]:
+    total_images = len(data["images"])
+    for idx, im in enumerate(data["images"], 1):
+        if progress_cb:
+            progress_cb(idx, total_images)
         char_anns = [a for a in anns_by_img.get(im["id"], [])
                      if cat_name.get(a["category_id"], "").lower() not in SPECIAL
                      and cat_name.get(a["category_id"]) in class_id]
@@ -248,6 +257,25 @@ def main():
     if missing:
         print(f"[warn] {len(missing)} image file(s) not found under {images_dir}: "
               f"{missing[:5]}{'...' if len(missing) > 5 else ''}", file=sys.stderr)
+
+    return {
+        "out": str(out.resolve()),
+        "classes": [{"id": class_id[c], "name": c, "boxes": counts[c]} for c in classes],
+        "n_ignore": n_ignore,
+        "yolo": {"images": yolo_imgs, "val_images": n_val, "boxes": yolo_boxes,
+                 "path": str((out / "yolo").resolve())} if do_yolo else None,
+        "crops": {"count": crop_count, "skipped_small": skipped_small,
+                  "path": str((out / "crops").resolve())} if do_crops else None,
+        "missing": missing,
+    }
+
+
+def main():
+    args = build_arg_parser().parse_args()
+    try:
+        run(args)
+    except ValueError as e:
+        sys.exit(str(e))
 
 
 if __name__ == "__main__":

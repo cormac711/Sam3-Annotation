@@ -1,0 +1,5 @@
+torch
+torchvision
+transformers>=5.0.0
+pillow
+pycocotools

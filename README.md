@@ -5,20 +5,66 @@ detection by Meta's **SAM 3**, everything stored as **standard COCO**:
 
 ```
                  ┌────────────────────────────── one folder ──────────────────────────────┐
-raw_images/ ──▶  1_detect.py  ──▶  raw_images/annotations.json  ──▶  2_annotate.html  ──▶  annotations_labeled.json
+raw_images/ ──▶  Detect  ──▶  raw_images/annotations.json  ──▶  Annotate  ──▶  annotations_labeled.json
                  (SAM 3, text        (COCO, category                (load the folder;         (COCO, characters
                   prompt "person")    "unlabeled")                   name every box)           as categories)
                                                                                                     │
-                                                                                              3_export.py
+                                                                                                 Export
                                                                                                     │
                                                                                      ├─ dataset/yolo/   detector training
                                                                                      └─ dataset/crops/  classifier training
 ```
 
 You give step 1 **one thing — the folder** — and the COCO `annotations.json` spawns inside it.
-Loading that same folder into the app brings boxes and images in together; no separate JSON step.
+Loading that same folder into Annotate brings boxes and images in together; no separate JSON step.
 
-## Install
+## The app (recommended)
+
+Detect, Annotate, and Export live together in one desktop app — no Python environment, no
+terminal, no separate HTML file to open.
+
+1. **Install**: run `Sam3 Annotation Setup.exe` (built via `installer/build-installer.ps1`,
+   see [Building the installer](#building-the-installer) below) — one click, no wizard, no admin
+   prompt. It launches itself when done.
+2. **First run**: the **Detect** tab checks your Hugging Face authorization for the gated
+   `facebook/sam3` weights. If you haven't requested access yet, do so once at
+   huggingface.co/facebook/sam3, then paste a token into the app (or run `hf auth login` in a
+   terminal) — no need to leave the app for this.
+3. **Detect**: pick a folder, set the concept prompt (`person` by default), and hit **RUN
+   DETECTION**. Batch size, device (CUDA/CPU), precision (fp16/bf16/fp32), and an optional VRAM
+   cap are all in-app controls — a live VRAM gauge tracks usage while a job runs, and if a batch
+   doesn't fit, the batch size is halved and retried automatically rather than crashing the job.
+   Multiple images are detected in a single batched forward pass, reusing one cached text-prompt
+   embedding across the whole run, rather than re-encoding the prompt per image.
+4. **Annotate**: click **OPEN IN ANNOTATE →** when detection finishes (or switch tabs and load a
+   folder yourself) — this is the same CAST/LIST labeling bench described below, running inside
+   the app. Loading a folder here also remembers where to save: **EXPORT** writes
+   `annotations_labeled.json` straight back into the folder, no manual "move the download" step.
+5. **Export**: point at the labeled JSON and an output folder, pick YOLO / crops / both, and run.
+
+The standalone tools below (`1_detect.py`, `2_annotate.html`, `3_export.py`) still work exactly as
+documented — they're the scriptable/headless path for automation or servers without a GUI. The
+app is a thin, faster shell around the same COCO pipeline, not a replacement for them.
+
+### Building the installer
+
+```powershell
+installer\build-installer.ps1
+```
+
+Requires Python (with `pip install -r backend/requirements.txt`), PyInstaller, and Node.js/npm.
+Freezes the backend with PyInstaller (`--onedir`, so the installed app starts fast — no
+per-launch re-extraction) and packages it with the Electron shell via electron-builder into
+`app/dist/Sam3 Annotation Setup.exe`. The installer bundles CUDA-enabled torch so it's a few GB
+and genuinely one-click — nothing further to install afterward except the gated SAM 3 weights
+themselves (~3.4 GB, downloaded on first Detect run, see step 2 above).
+
+## Advanced: command-line pipeline
+
+The three scripts below are what the app runs under the hood, exposed directly for scripting,
+headless/server use, or if you'd rather not install the app at all.
+
+### Install
 
 ```bash
 pip install -r requirements.txt        # torch + transformers (v5+, has SAM 3) + pillow
@@ -31,7 +77,7 @@ pip install -r requirements.txt        # torch + transformers (v5+, has SAM 3) +
 
 First run downloads ~3.4 GB of weights. A GPU is strongly recommended; CPU works but takes seconds per image.
 
-## Step 1 — detect characters with SAM 3
+### Step 1 — detect characters with SAM 3
 
 ```bash
 python 1_detect.py ./raw_images
@@ -60,7 +106,7 @@ For "stacked together / too small" posters: run once with `--preview`, look at t
 `--threshold` and `--prompt`. False positives are cheap (one keypress to delete in step 2); the app's
 draw tool covers anything SAM 3 missed. The script checkpoints every 20 images, so interrupting is safe.
 
-## Step 2 — name every box (the app)
+### Step 2 — name every box (2_annotate.html)
 
 Open **`2_annotate.html`** in any modern browser (double-click the file — no server, fully offline).
 
@@ -118,7 +164,7 @@ each point, click the start point (or press `Enter`) to close the loop, then cho
 **Cancel**. `Esc` abandons an in-progress new path. Every edit (brush or pen) is re-encoded to COCO
 RLE on `EXPORT`, and is undoable with `Ctrl`+`Z`.
 
-## Step 3 — build the datasets
+### Step 3 — build the datasets
 
 ```bash
 python 3_export.py raw_images/annotations_labeled.json -o ./dataset
@@ -137,7 +183,7 @@ yolo detect train data=dataset/yolo/data.yaml model=yolov8m.pt imgsz=1024 epochs
 
 Category semantics during export: `ignore` boxes are excluded from classes (an image where *every* box is ignore stays in the YOLO set as a clean negative); images that still contain `unlabeled` boxes are **left out of the YOLO set** (they'd teach the detector those characters are background) but their labeled boxes still go to crops. Other flags: `--val-ratio 0.1`, `--min-crop 32`, `--link`, `--seed`.
 
-## Using it at inference time
+### Using it at inference time
 
 **A. Single stage** — your trained YOLO model does detection + identity in one pass. Simple and fast; wants ~50+ boxes per character.
 
@@ -168,7 +214,7 @@ for box, score in zip(res["boxes"].tolist(), res["scores"].tolist()):
 
 `crops/` exists for option B, `yolo/` for option A — you get both, so benchmark and keep the winner.
 
-## The COCO file
+### The COCO file
 
 Standard COCO object-detection layout — readable by pycocotools, FiftyOne, CVAT, etc.:
 
@@ -198,7 +244,7 @@ Standard COCO object-detection layout — readable by pycocotools, FiftyOne, CVA
 
 The two meta categories carry the workflow state: fresh step-1 output is 100% `unlabeled`; a finished, fully-labeled export contains no `unlabeled` category at all. `segmentation` round-trips through the app — viewable and editable with the mask brush (`M`) — and is re-encoded to COCO RLE on export; boxes with no mask simply omit the key.
 
-## Gotchas
+### Gotchas
 
 - **Gated weights**: `1_detect.py` prints exactly what to do if HF access/login is missing.
 - **`file_name` includes subfolder paths** (`sub/a.jpg`) and the app's folder loader matches on them, so duplicate basenames across subfolders are fine *when loading folders*; only the loose-files button falls back to name-only matching.
