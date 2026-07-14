@@ -69,11 +69,19 @@
   .paneltitle .cnt{letter-spacing:0; color:var(--muted)}
 
   /* filmstrip rows */
+  .filmfilter{padding:7px 10px; border-bottom:1px solid var(--line)}
+  .filmfilter input{
+    width:100%; background:var(--bay); border:1px solid var(--line2); border-radius:6px;
+    padding:5px 8px; font-size:11.5px; color:var(--ink);
+  }
+  .filmfilter input::placeholder{color:var(--dim)}
+  .filmfilter input.bad{border-color:var(--red)}
   #filmlist{overflow-y:auto; flex:1; padding:4px 0}
   .frow{
     display:flex; align-items:center; gap:8px; width:100%; text-align:left;
     padding:5px 12px; font-size:12px; color:var(--muted); border-left:2px solid transparent;
   }
+  .frow.filtered-out{display:none}
   .frow:hover{background:var(--panel2); color:var(--ink)}
   .frow.cur{background:var(--panel2); color:var(--ink); border-left-color:var(--accent)}
   .frow .num{color:var(--dim); font-size:10px; width:30px; flex:none}
@@ -93,15 +101,25 @@
   #cv{position:absolute; inset:0; width:100%; height:100%; touch-action:none; display:block}
   #cv.grabbing{cursor:grabbing !important}
   .hud{
-    position:absolute; left:10px; bottom:10px; display:flex; gap:6px; align-items:center;
-    background:color-mix(in srgb,var(--panel) 88%,transparent); border:1px solid var(--line2);
-    border-radius:8px; padding:4px; backdrop-filter:blur(4px);
+    position:absolute; left:10px; right:10px; top:10px; display:flex; gap:8px; align-items:flex-start;
+    flex-wrap:wrap; pointer-events:none;
   }
-  .hud button{min-width:26px;height:24px;border-radius:5px;color:var(--muted);font-size:12px;padding:0 7px}
+  .hud-group{
+    display:flex; gap:5px; align-items:center; pointer-events:auto;
+    background:color-mix(in srgb,var(--panel) 90%,transparent); border:1px solid var(--line2);
+    border-radius:9px; padding:5px 7px; backdrop-filter:blur(6px);
+    box-shadow:0 4px 16px rgba(0,0,0,.25);
+  }
+  .hud-cap{
+    font-size:9px; letter-spacing:.16em; color:var(--dim); padding-left:2px; padding-right:3px;
+    user-select:none; border-right:1px solid var(--line2); margin-right:1px; align-self:stretch;
+    display:flex; align-items:center;
+  }
+  .hud button{min-width:26px;height:25px;border-radius:6px;color:var(--muted);font-size:12px;padding:0 8px}
   .hud button:hover{color:var(--ink); background:var(--panel2)}
   .hud button.on{background:var(--accent); color:var(--accent-ink); font-weight:700}
-  .hud .sep{width:1px;height:16px;background:var(--line2)}
-  .hud .zl{color:var(--muted); font-size:11px; min-width:44px; text-align:center}
+  .hud .zl{color:var(--muted); font-size:11px; min-width:40px; text-align:center}
+  @media (max-width:900px){ .hud{ right:auto } }
 
   /* empty state */
   #empty{
@@ -201,6 +219,7 @@
   dialog p{color:var(--muted); margin:4px 0}
   dialog .keys{display:grid; grid-template-columns:auto 1fr auto 1fr; gap:5px 14px; font-size:12.5px; color:var(--muted); align-items:center}
   dialog .keys span{color:var(--ink)}
+  dialog .pathBtns{display:flex; gap:8px; margin-top:14px; flex-wrap:wrap}
   dialog .x{position:absolute; right:12px; top:10px; color:var(--dim); font-size:16px}
   @media (max-width:900px){
     main{grid-template-columns:0 minmax(0,1fr) 260px}
@@ -235,19 +254,44 @@
 <main>
   <aside id="filmstrip">
     <div class="paneltitle"><span>IMAGES</span><span class="cnt" id="filmcnt">0</span></div>
+    <div class="filmfilter">
+      <input id="filmFilter" type="text" placeholder="filter: naruto AND sakura, NOT ignore…" autocomplete="off" spellcheck="false" title="Filter images by label — combine up to 4 labels with AND / OR / NOT">
+    </div>
     <div id="filmlist"></div>
   </aside>
 
   <section id="stage">
     <canvas id="cv"></canvas>
     <div class="hud">
-      <button id="mSelect" class="on" title="Select / move / resize (V)">SELECT</button>
-      <button id="mDraw" title="Draw a new box (B)">DRAW</button>
-      <span class="sep"></span>
-      <button id="zOut" title="Zoom out (−)">−</button>
-      <span class="zl" id="zLabel">100%</span>
-      <button id="zIn" title="Zoom in (+)">＋</button>
-      <button id="zFit" title="Fit image (F)">FIT</button>
+      <div class="hud-group">
+        <span class="hud-cap">TOOL</span>
+        <button id="mSelect" class="on" title="Select / move / resize (V)">SELECT</button>
+        <button id="mDraw" title="Draw a new box (B)">DRAW</button>
+        <button id="mMask" title="Paint / erase the selected box's mask (M) — right-click or Alt to erase">MASK</button>
+        <button id="mPen" title="Edit the mask outline point-by-point (O) — drag a point, click an edge to add one, Delete removes a hovered point">PEN</button>
+        <button id="mNewPath" title="Draw a brand-new independent selection (I) — click to place points, click the start point (or Enter) to close, then Replace/Merge/Subtract">NEW PATH</button>
+      </div>
+      <div class="hud-group">
+        <span class="hud-cap">BRUSH</span>
+        <button id="brDown" title="Smaller brush ([)">−</button>
+        <span class="zl" id="brLabel">24px</span>
+        <button id="brUp" title="Bigger brush (])">＋</button>
+        <button id="mClearMask" title="Clear the selected box's mask">CLEAR</button>
+        <button id="mFillHoles" title="Fill any unmasked gaps fully enclosed inside the selected mask">FILL HOLES</button>
+      </div>
+      <div class="hud-group">
+        <span class="hud-cap">VIEW</span>
+        <button id="vBoth" class="on" title="Show boxes and masks">BOTH</button>
+        <button id="vBox" title="Show boxes only">BOXES</button>
+        <button id="vMask" title="Show masks only">MASKS</button>
+      </div>
+      <div class="hud-group">
+        <span class="hud-cap">ZOOM</span>
+        <button id="zOut" title="Zoom out (−)">−</button>
+        <span class="zl" id="zLabel">100%</span>
+        <button id="zIn" title="Zoom in (+)">＋</button>
+        <button id="zFit" title="Fit image (F)">FIT</button>
+      </div>
     </div>
     <div id="empty">
       <div class="mark">CAST<span class="slash">/</span>LIST</div>
@@ -284,7 +328,7 @@
   <span class="mode" id="fMode">SELECT</span>
   <span class="coords" id="fCoords">—</span>
   <span id="fSel">no box selected</span>
-  <span class="hint">assign <kbd>1</kbd>–<kbd>9</kbd> · ignore <kbd>0</kbd> · next unlabeled <kbd>Enter</kbd> · cycle <kbd>Tab</kbd> · delete <kbd>X</kbd> · draw <kbd>B</kbd> · help <kbd>?</kbd></span>
+  <span class="hint">assign <kbd>1</kbd>–<kbd>9</kbd> · ignore <kbd>0</kbd> · next unlabeled <kbd>Enter</kbd> · cycle <kbd>Tab</kbd> · delete <kbd>X</kbd> · draw <kbd>B</kbd> · mask <kbd>M</kbd> · pen <kbd>O</kbd> · new path <kbd>I</kbd> · undo <kbd>Ctrl</kbd>+<kbd>Z</kbd> · image <kbd>←</kbd><kbd>→</kbd> · help <kbd>?</kbd></span>
 </footer>
 
 <div id="toasts"></div>
@@ -302,15 +346,36 @@
     <kbd>0</kbd><span>mark as ignore / not a character</span>
     <kbd>Enter</kbd><span>jump to next unlabeled box</span>
     <kbd>Tab</kbd><span>cycle boxes in this image</span>
-    <kbd>X</kbd><span>delete selected box (false positive)</span>
-    <kbd>U</kbd><span>undo last delete</span>
+    <kbd>X</kbd><span>delete selected box (false positive) — or a hovered pen point in PEN mode</span>
+    <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>U</kbd><span>undo last action — box move/resize, delete, mask edit, or pen edit</span>
   </div>
   <h3>BOXES</h3>
   <div class="keys">
     <kbd>B</kbd><span>draw a missed box (drag)</span>
     <kbd>V</kbd> / <kbd>Esc</kbd><span>back to select / deselect</span>
-    <kbd>←↑↓→</kbd><span>nudge selected box (Shift = ×10)</span>
+    <kbd>Alt</kbd>+<kbd>←↑↓→</kbd><span>nudge selected box (Shift = ×10)</span>
     <span style="grid-column:span 2;color:var(--dim)">drag inside a box to move it, drag its handles to resize</span>
+  </div>
+  <h3>SEGMENTATION — BRUSH</h3>
+  <div class="keys">
+    <kbd>M</kbd><span>paint/erase the selected box's mask</span>
+    <kbd>drag</kbd><span>paint (add to mask)</span>
+    <kbd>right-drag</kbd> / <kbd>Alt</kbd>+drag<span>erase</span>
+    <kbd>[</kbd> / <kbd>]</kbd><span>shrink / grow brush</span>
+    <span style="grid-column:span 2;color:var(--dim)">SAM&nbsp;3 masks load in automatically (COCO RLE); a box without one gets a
+      blank mask the first time you paint on it. CLEAR wipes it, FILL HOLES fills any fully-enclosed gaps.</span>
+  </div>
+  <h3>SEGMENTATION — PEN</h3>
+  <div class="keys">
+    <kbd>O</kbd><span>edit the mask outline point-by-point (needs an existing mask)</span>
+    <kbd>drag point</kbd><span>reshape the outline (drag any selected point to move the whole group)</span>
+    <kbd>drag empty area</kbd><span>marquee-select multiple points</span>
+    <kbd>click edge</kbd><span>insert a new point there</span>
+    <kbd>X</kbd> / <kbd>Delete</kbd><span>remove the hovered or marquee-selected point(s)</span>
+    <kbd>Alt</kbd>+right-click<span>delete that point directly</span>
+    <kbd>I</kbd><span>NEW PATH — draw an independent new shape from scratch</span>
+    <span style="grid-column:span 2;color:var(--dim)">In NEW PATH: click to place points, click the start point (or press Enter) to
+      close the loop, then choose Replace / Merge / Subtract for the box's mask. Esc cancels the in-progress path.</span>
   </div>
   <h3>VIEW & FILES</h3>
   <div class="keys">
@@ -318,8 +383,30 @@
     <kbd>drag</kbd><span>pan (empty area or hold Space)</span>
     <kbd>F</kbd><span>fit image</span>
     <kbd>Z</kbd><span>zoom to selected box</span>
-    <kbd>N</kbd> / <kbd>P</kbd><span>next / previous image</span>
+    <kbd>←→↑↓</kbd> / <kbd>N</kbd><kbd>P</kbd><span>next / previous image</span>
     <kbd>Ctrl</kbd>+<kbd>S</kbd><span>export labeled JSON</span>
+    <span style="grid-column:span 2;color:var(--dim)">BOTH / BOXES / MASKS in the view HUD switch what's drawn on the canvas — labeling still works in any view.</span>
+  </div>
+  <h3>FILTER IMAGES</h3>
+  <div class="keys">
+    <span style="grid-column:span 2;color:var(--dim)">The box above the filmstrip filters which images are listed, by which character labels they
+      contain — up to 4 terms combined with AND / OR / NOT (left to right, no parentheses).
+      Also matches the special labels <b>ignore</b> and <b>unlabeled</b>.</span>
+    <kbd>naruto AND sakura</kbd><span>images with both</span>
+    <kbd>naruto OR sakura</kbd><span>images with either</span>
+    <kbd>NOT ignore</kbd><span>images with no ignore boxes</span>
+    <kbd>naruto AND NOT mob</kbd><span>images with naruto but no "mob"</span>
+  </div>
+</dialog>
+
+<dialog id="pathResolve">
+  <h2>NEW PATH — box <span id="prName"></span></h2>
+  <p>What should this new shape do to the box's mask?</p>
+  <div class="pathBtns">
+    <button class="btn primary" id="prReplace">REPLACE</button>
+    <button class="btn" id="prMerge">MERGE (union)</button>
+    <button class="btn" id="prSubtract">SUBTRACT</button>
+    <button class="btn" id="prCancel">CANCEL</button>
   </div>
 </dialog>
 
@@ -345,8 +432,12 @@ const state = {
   mode: "select",
   view: {scale: 1, x: 0, y: 0},
   dirty: false,
+  viewMode: "both",    // "both" | "box" | "mask"
+  brushRadius: 24,     // image-space px
+  penDrawingNew: false, // true while placing points for a brand-new pen path
 };
-const undoStack = [];  // deleted boxes: {imgKey, det, pos}
+// undo entries: {kind:"delete", imgKey, det, pos} or {kind:"mask", imgKey, det, snapshot}
+const undoStack = [];
 
 /* ============================== dom ============================== */
 const $ = id => document.getElementById(id);
@@ -371,12 +462,405 @@ function labelColor(name) {
   return l ? l.color : "#9aa3b2";
 }
 function detDone(d) { return d.label !== null && d.label !== undefined && d.label !== ""; }
+function hasMask(d) { return !!(d._bmp || d.seg); }
 function imgStats(e) {
   const total = e.dets.length;
   const done = e.dets.filter(detDone).length;
   return {total, done, todo: total - done};
 }
 function curEntry() { return state.images[state.cur] || null; }
+
+/* ============================== segmentation (COCO RLE <-> bitmap) ============================== */
+// Matches pycocotools' maskApi.c rleToString/rleFrString exactly (verified by
+// round-tripping real SAM 3 masks through both implementations).
+function decodeCountsString(s) {
+  const counts = [];
+  let p = 0;
+  while (p < s.length) {
+    let x = 0, k = 0, more = 1;
+    while (more) {
+      const c = s.charCodeAt(p) - 48;
+      x |= (c & 0x1f) << (5 * k);
+      more = c & 0x20;
+      p++; k++;
+      if (!more && (c & 0x10)) x |= (-1 << (5 * k));
+    }
+    if (counts.length > 2) x += counts[counts.length - 2];
+    counts.push(x);
+  }
+  return counts;
+}
+function encodeCountsString(counts) {
+  let s = "";
+  counts.forEach((c, i) => {
+    let x = i > 2 ? c - counts[i - 2] : c;
+    let more = 1;
+    while (more) {
+      let ch = x & 0x1f;
+      x >>= 5;
+      more = (ch & 0x10) ? (x !== -1) : (x !== 0);
+      if (more) ch |= 0x20;
+      s += String.fromCharCode(ch + 48);
+    }
+  });
+  return s;
+}
+// RLE ({size:[h,w], counts:"..."}) -> Uint8Array, row-major (index = y*w+x), 0/1
+function rleToBitmap(rle) {
+  const [h, w] = rle.size;
+  const counts = typeof rle.counts === "string" ? decodeCountsString(rle.counts) : rle.counts;
+  const bmp = new Uint8Array(h * w);
+  let pos = 0, val = 0;
+  for (const c of counts) {
+    if (val) {
+      for (let k = 0; k < c; k++) {
+        const p = pos + k;                          // column-major position
+        const col = (p / h) | 0, row = p % h;
+        bmp[row * w + col] = 1;
+      }
+    }
+    pos += c;
+    val ^= 1;
+  }
+  return bmp;
+}
+// row-major 0/1 bitmap -> COCO RLE
+function bitmapToRle(bmp, h, w) {
+  const counts = [];
+  let val = 0, run = 0;
+  for (let col = 0; col < w; col++) {
+    for (let row = 0; row < h; row++) {
+      const v = bmp[row * w + col] ? 1 : 0;
+      if (v === val) run++;
+      else { counts.push(run); val = v; run = 1; }
+    }
+  }
+  counts.push(run);
+  return {size: [h, w], counts: encodeCountsString(counts)};
+}
+function maskColorFor(d) {
+  return detDone(d) ? (d.label === IGNORE ? "#7d8697" : labelColor(d.label)) : "#ff5d5d";
+}
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+// baked-in alpha for mask fills — display-time globalAlpha (see draw()) dims this down
+// for non-selected masks and brings it to full strength for the selected/focused one
+const MASK_ALPHA = 165;
+// (re)builds the whole offscreen mask canvas from d._bmp — only called on
+// decode/undo/label-color-change, never per brush-move (see paintMaskRegion)
+function repaintMaskCanvas(d, w, h) {
+  if (!d._bmp || !d._maskCtx) return;
+  const [r, g, b] = hexToRgb(maskColorFor(d));
+  const id = d._maskCtx.createImageData(w, h);
+  const bmp = d._bmp, data = id.data;
+  for (let i = 0, p = 0; i < bmp.length; i++, p += 4) {
+    if (bmp[i]) { data[p] = r; data[p + 1] = g; data[p + 2] = b; data[p + 3] = MASK_ALPHA; }
+  }
+  d._maskCtx.putImageData(id, 0, 0);
+}
+// updates only a sub-rectangle of the offscreen canvas — used during brush strokes
+function paintMaskRegion(d, w, x0, y0, rw, rh) {
+  const [r, g, b] = hexToRgb(maskColorFor(d));
+  const id = d._maskCtx.createImageData(rw, rh);
+  const data = id.data;
+  for (let yy = 0; yy < rh; yy++) {
+    for (let xx = 0; xx < rw; xx++) {
+      const v = d._bmp[(y0 + yy) * w + (x0 + xx)];
+      const p = (yy * rw + xx) * 4;
+      if (v) { data[p] = r; data[p + 1] = g; data[p + 2] = b; data[p + 3] = MASK_ALPHA; }
+    }
+  }
+  d._maskCtx.putImageData(id, x0, y0);
+}
+function ensureMaskCanvas(d, w, h) {
+  if (d._maskCanvas) return;
+  d._maskCanvas = document.createElement("canvas");
+  d._maskCanvas.width = w; d._maskCanvas.height = h;
+  d._maskCtx = d._maskCanvas.getContext("2d", {willReadFrequently: false});
+}
+// lazily decodes d.seg (COCO RLE) into an editable bitmap; safe to call every frame
+function decodeDetMask(d, w, h) {
+  if (d._bmp || !d.seg) return;
+  const rle = d.seg;
+  if (!Array.isArray(rle.size) || rle.size[0] !== h || rle.size[1] !== w) {
+    toast("box #" + d.id + ": mask size doesn't match the image — dropped", "warn");
+    d.seg = null;
+    return;
+  }
+  try {
+    d._bmp = rleToBitmap(rle);
+  } catch (e) {
+    toast("box #" + d.id + ": could not decode mask — dropped", "warn");
+    d.seg = null;
+    return;
+  }
+  ensureMaskCanvas(d, w, h);
+  repaintMaskCanvas(d, w, h);
+  updateOutline(d, w, h);
+}
+// creates a blank editable mask for a box that doesn't have one yet (e.g. a
+// manually drawn box) so the user can paint one from scratch
+function ensureMaskEditable(d, w, h) {
+  if (!d._bmp) {
+    d._bmp = new Uint8Array(w * h);
+    ensureMaskCanvas(d, w, h);
+    repaintMaskCanvas(d, w, h);
+  }
+  return d._bmp;
+}
+// paints (or erases) a filled circle of radius r (image px) centered at (cx,cy)
+function paintAt(d, w, h, cx, cy, r, erase) {
+  const x0 = clamp(Math.floor(cx - r), 0, w - 1), x1 = clamp(Math.ceil(cx + r), 0, w - 1);
+  const y0 = clamp(Math.floor(cy - r), 0, h - 1), y1 = clamp(Math.ceil(cy + r), 0, h - 1);
+  if (x1 < x0 || y1 < y0) return;
+  const val = erase ? 0 : 1, r2 = r * r, bmp = d._bmp;
+  for (let y = y0; y <= y1; y++) {
+    const dy = y - cy;
+    for (let x = x0; x <= x1; x++) {
+      const dx = x - cx;
+      if (dx * dx + dy * dy <= r2) bmp[y * w + x] = val;
+    }
+  }
+  paintMaskRegion(d, w, x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+  d._bmpDirty = true;
+}
+// strokes a line of brush dabs between two image-space points (fills gaps on fast moves)
+function paintStroke(d, w, h, ax, ay, bx, by, r, erase) {
+  const dist = Math.hypot(bx - ax, by - ay);
+  const steps = Math.max(1, Math.ceil(dist / Math.max(2, r * 0.5)));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    paintAt(d, w, h, ax + (bx - ax) * t, ay + (by - ay) * t, r, erase);
+  }
+}
+// flushes any dirty edited bitmap for every det in an entry back into COCO RLE
+// (d.seg) and drops the raster working set — called before switching images
+// and before export, so only the current image ever holds decoded bitmaps
+function flushMasks(entry) {
+  if (!entry) return;
+  for (const d of entry.dets) {
+    if (d._bmp) {
+      if (d._bmpDirty) {
+        const hasAny = d._bmp.some(Boolean);
+        d.seg = hasAny ? bitmapToRle(d._bmp, entry.height, entry.width) : null;
+      }
+      delete d._bmp; delete d._bmpDirty; delete d._maskCanvas; delete d._maskCtx;
+      delete d._outline; delete d._pen; delete d._newPath;
+    }
+  }
+}
+function decodeMasks(entry) {
+  if (!entry || !entry.width || !entry.height) return;
+  for (const d of entry.dets) decodeDetMask(d, entry.width, entry.height);
+}
+
+/* ============================== fill holes (flood fill from border) ============================== */
+function fillHoles() {
+  const e = curEntry();
+  if (!e || state.sel < 0) { toast("select a box first", "warn"); return; }
+  const d = e.dets[state.sel];
+  if (!hasMask(d)) { toast("box has no mask", "warn"); return; }
+  ensureMaskEditable(d, e.width, e.height);
+  const w = e.width, h = e.height, bmp = d._bmp;
+  const before = bmp.slice();
+
+  const outside = new Uint8Array(w * h);
+  const stack = [];
+  const mark = p => { if (!bmp[p] && !outside[p]) { outside[p] = 1; stack.push(p); } };
+  for (let x = 0; x < w; x++) { mark(x); mark((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { mark(y * w); mark(y * w + w - 1); }
+  while (stack.length) {
+    const p = stack.pop();
+    const x = p % w, y = (p / w) | 0;
+    if (x > 0) mark(p - 1);
+    if (x < w - 1) mark(p + 1);
+    if (y > 0) mark(p - w);
+    if (y < h - 1) mark(p + w);
+  }
+
+  let filled = 0;
+  for (let i = 0; i < bmp.length; i++) if (!bmp[i] && !outside[i]) { bmp[i] = 1; filled++; }
+  if (!filled) { toast("no enclosed gaps found", "ok"); return; }
+
+  undoStack.push({kind: "mask", imgKey: e.key, det: d, snapshot: before});
+  repaintMaskCanvas(d, w, h);
+  d._bmpDirty = true;
+  state.dirty = true;
+  updateOutline(d, w, h);
+  toast("filled " + filled + " enclosed px — Ctrl+Z to undo", "ok");
+  requestDraw();
+}
+
+/* ============================== pen tool (outline vertex editing) ============================== */
+// Moore-neighbor boundary trace of the connected component containing (startX, startY).
+// Returns an ordered list of [x,y] boundary pixel centers forming one closed loop.
+function traceContour(bmp, w, h, startX, startY) {
+  const NB = [[-1,0],[-1,-1],[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1]];
+  const at = (x, y) => (x >= 0 && x < w && y >= 0 && y < h) ? bmp[y * w + x] : 0;
+  const pts = [];
+  let cx = startX, cy = startY, backDir = 0;
+  const maxSteps = w * h * 4 + 8;
+  let steps = 0;
+  do {
+    pts.push([cx, cy]);
+    let found = false;
+    for (let k = 0; k < 8; k++) {
+      const dir = (backDir + k) % 8;
+      const [dx, dy] = NB[dir];
+      if (at(cx + dx, cy + dy)) {
+        cx += dx; cy += dy;
+        backDir = (dir + 5) % 8;
+        found = true;
+        break;
+      }
+    }
+    if (!found) break;
+    steps++;
+  } while (!(cx === startX && cy === startY) && steps < maxSteps);
+  return pts;
+}
+// recursive Douglas-Peucker on an open point chain
+function rdpSimplify(points, eps) {
+  if (points.length < 3) return points;
+  const [x1, y1] = points[0], [x2, y2] = points[points.length - 1];
+  const dx = x2 - x1, dy = y2 - y1;
+  const norm = Math.hypot(dx, dy) || 1;
+  let maxDist = 0, idx = 0;
+  for (let i = 1; i < points.length - 1; i++) {
+    const [px, py] = points[i];
+    const d = Math.abs(dy * px - dx * py + x2 * y1 - y2 * x1) / norm;
+    if (d > maxDist) { maxDist = d; idx = i; }
+  }
+  if (maxDist > eps) {
+    const left = rdpSimplify(points.slice(0, idx + 1), eps);
+    const right = rdpSimplify(points.slice(idx), eps);
+    return left.slice(0, -1).concat(right);
+  }
+  return [points[0], points[points.length - 1]];
+}
+// simplifies a CLOSED loop by splitting it into two chains, simplifying each, and rejoining
+function simplifyClosedPolygon(pts, eps) {
+  if (pts.length < 3) return pts;
+  const mid = Math.floor(pts.length / 2);
+  const a = rdpSimplify(pts.slice(0, mid + 1), eps);
+  const b = rdpSimplify(pts.slice(mid), eps);
+  const combined = a.slice(0, -1).concat(b.slice(0, -1));
+  return combined.length >= 3 ? combined : pts;
+}
+// traces the mask's main outline and simplifies it into a manageable set of editable points
+function tracePenPolygon(d, w, h) {
+  const bmp = d._bmp;
+  let sx = -1, sy = -1;
+  outer:
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (bmp[y * w + x] && !(x > 0 && bmp[y * w + x - 1])) { sx = x; sy = y; break outer; }
+    }
+  }
+  if (sx < 0) return null;
+  const raw = traceContour(bmp, w, h, sx, sy);
+  if (raw.length < 3) return null;
+  let tol = 2, simplified = simplifyClosedPolygon(raw, tol);
+  while (simplified.length > 150 && tol < 40) { tol *= 1.6; simplified = simplifyClosedPolygon(raw, tol); }
+  return simplified;
+}
+// rasterizes an arbitrary closed polygon (image-space points) into a fresh 0/1 bitmap
+function polygonToBitmap(poly, w, h) {
+  const off = document.createElement("canvas");
+  off.width = w; off.height = h;
+  const octx = off.getContext("2d");
+  octx.fillStyle = "#fff";
+  octx.beginPath();
+  octx.moveTo(poly[0][0], poly[0][1]);
+  for (let i = 1; i < poly.length; i++) octx.lineTo(poly[i][0], poly[i][1]);
+  octx.closePath();
+  octx.fill();
+  const id = octx.getImageData(0, 0, w, h).data;
+  const bmp = new Uint8Array(w * h);
+  for (let i = 0, p = 3; i < bmp.length; i++, p += 4) bmp[i] = id[p] > 127 ? 1 : 0;
+  return bmp;
+}
+// fills d._pen (a polygon) back into d._bmp and the mask canvas
+function rasterizePenPolygon(d, w, h) {
+  const poly = d._pen;
+  if (!poly || poly.length < 3) return;
+  d._bmp = polygonToBitmap(poly, w, h);
+  d._bmpDirty = true;
+  repaintMaskCanvas(d, w, h);
+}
+// (re)traces the mask's outline and caches it on d._outline — the source both the
+// always-visible animated silhouette and a fresh starting point for the pen tool
+function updateOutline(d, w, h) {
+  d._outline = d._bmp ? tracePenPolygon(d, w, h) : null;
+}
+// lazily makes sure d._pen exists for the currently-selected box, reusing the cached
+// outline if there is one (so toggling in/out of pen mode doesn't lose hand-placed
+// points) and only re-tracing from the raster when there's nothing cached yet
+function ensurePenOutline(d, w, h) {
+  if (d._pen) return true;
+  if (!hasMask(d)) return false;
+  ensureMaskEditable(d, w, h);
+  const poly = d._outline || tracePenPolygon(d, w, h);
+  if (!poly) return false;
+  d._pen = poly.map(p => p.slice());
+  penHover = -1; penSelected = new Set();
+  return true;
+}
+function hitPenVertex(sx, sy) {
+  const e = curEntry();
+  if (!e || state.sel < 0) return -1;
+  const d = e.dets[state.sel];
+  if (!d._pen) return -1;
+  for (let i = 0; i < d._pen.length; i++) {
+    const [px, py] = toScreen(d._pen[i][0], d._pen[i][1]);
+    if (Math.hypot(sx - px, sy - py) <= 7) return i;
+  }
+  return -1;
+}
+// finds the nearest point on the polygon's edges to a screen coord; returns {idx, pt} where
+// idx is the vertex index the new point should be inserted after, or null if not close enough
+function hitPenEdge(sx, sy) {
+  const e = curEntry();
+  if (!e || state.sel < 0) return null;
+  const d = e.dets[state.sel];
+  if (!d._pen || d._pen.length < 2) return null;
+  let best = null, bestDist = Infinity;
+  for (let i = 0; i < d._pen.length; i++) {
+    const [ax, ay] = d._pen[i], [bx, by] = d._pen[(i + 1) % d._pen.length];
+    const [asx, asy] = toScreen(ax, ay), [bsx, bsy] = toScreen(bx, by);
+    const dx = bsx - asx, dy = bsy - asy;
+    const len2 = dx * dx + dy * dy || 1;
+    let t = ((sx - asx) * dx + (sy - asy) * dy) / len2;
+    t = clamp(t, 0, 1);
+    const psx = asx + dx * t, psy = asy + dy * t;
+    const dist = Math.hypot(sx - psx, sy - psy);
+    if (dist < bestDist) { bestDist = dist; best = {idx: i, pt: [ax + (bx - ax) * t, ay + (by - ay) * t]}; }
+  }
+  return bestDist <= 8 ? best : null;
+}
+function deletePenVertex() {
+  const e = curEntry();
+  const d = e.dets[state.sel];
+  if (!d._pen) return;
+  const toRemove = penSelected.size > 0 ? [...penSelected] : (penHover >= 0 ? [penHover] : []);
+  if (!toRemove.length) return;
+  if (d._pen.length - toRemove.length < 3) { toast("need at least 3 points remaining", "warn"); return; }
+  undoStack.push({kind: "pen", imgKey: e.key, det: d, prevPen: d._pen.map(p => p.slice()), prevBmp: d._bmp.slice()});
+  toRemove.sort((a, b) => b - a).forEach(i => d._pen.splice(i, 1));
+  penSelected = new Set();
+  penHover = -1;
+  rasterizePenPolygon(d, e.width, e.height);
+  toast(toRemove.length > 1 ? toRemove.length + " points deleted — Ctrl+Z to undo" : "point deleted — Ctrl+Z to undo");
+  requestDraw();
+}
+// used by Alt+Right-click: delete one specific vertex directly, regardless of hover/selection
+function deletePenVertexAt(vi) {
+  penSelected = new Set();
+  penHover = vi;
+  deletePenVertex();
+}
 
 /* ============================== file matching ============================== */
 function stripRoot(rel) {
@@ -488,14 +972,15 @@ function importCoco(data, fileFor) {
   for (const a of data.annotations) {
     const e = byId.get(a.image_id);
     if (!e || !Array.isArray(a.bbox)) { dropped++; continue; }
-    const {id, image_id, category_id, bbox, area, score, source, ...extra} = a;
+    const {id, image_id, category_id, bbox, area, score, source, segmentation, ...extra} = a;
     const [x, y, w, h] = bbox.map(Number);
     const cat = catById.get(category_id);
     const lc = cat ? String(cat.name).trim().toLowerCase() : "unlabeled";
     const label = lc === "unlabeled" ? null : lc === "ignore" ? IGNORE : norm(cat.name);
     e.dets.push({
       id: e.dets.length + 1, bbox: [x, y, x + w, y + h],
-      score: score ?? null, label, source: source || "detector", extra,
+      score: score ?? null, label, source: source || "detector",
+      seg: segmentation || null, extra,
     });
   }
   if (dropped) toast(dropped + " annotation(s) skipped (missing image or bbox)", "warn");
@@ -515,7 +1000,8 @@ function importLegacy(data, fileFor) {
     width: e.width | 0, height: e.height | 0,
     dets: (e.detections || []).map((d, j) => ({
       id: j + 1, bbox: d.bbox.map(Number), score: d.score ?? null,
-      label: d.label ?? null, source: d.source || "detector", extra: {},
+      label: d.label ?? null, source: d.source || "detector",
+      seg: d.segmentation || null, extra: {},
     })),
     file: fileFor(e.rel_path || e.file_name, e.file_name),
     key: (e.rel_path || e.file_name || i) + "", cocoId: i + 1, extraImg: {},
@@ -528,6 +1014,7 @@ function importLegacy(data, fileFor) {
 
 function exportJSON() {
   if (!state.images.length) { toast("nothing to export yet", "warn"); return; }
+  flushMasks(curEntry());
   let nIgn = 0, nUnl = 0;
   for (const e of state.images) for (const d of e.dets) {
     if (d.label === IGNORE) nIgn++;
@@ -566,6 +1053,7 @@ function exportJSON() {
         source: d.source || "detector",
       };
       if (d.score != null) ann.score = d.score;
+      if (d.seg) ann.segmentation = d.seg;
       cocoAnns.push(ann);
     }
   }
@@ -607,10 +1095,14 @@ const imageCache = {
       entry.width = img.naturalWidth; entry.height = img.naturalHeight;
     } else if (entry.width !== img.naturalWidth || entry.height !== img.naturalHeight) {
       const sx = img.naturalWidth / entry.width, sy = img.naturalHeight / entry.height;
-      for (const d of entry.dets) d.bbox = [d.bbox[0]*sx, d.bbox[1]*sy, d.bbox[2]*sx, d.bbox[3]*sy].map(Math.round);
+      for (const d of entry.dets) {
+        d.bbox = [d.bbox[0]*sx, d.bbox[1]*sy, d.bbox[2]*sx, d.bbox[3]*sy].map(Math.round);
+        delete d._bmp; delete d._bmpDirty; delete d._maskCanvas; delete d._maskCtx; // can't rescale a raster mask; re-decode will drop it (size no longer matches)
+      }
       entry.width = img.naturalWidth; entry.height = img.naturalHeight;
       state.dirty = true;
-      toast(entry.fileName + ": size differs from manifest — boxes rescaled", "warn");
+      toast(entry.fileName + ": size differs from manifest — boxes rescaled" +
+            (entry.dets.some(d => d.seg) ? " (masks dropped)" : ""), "warn");
     }
     this.map.set(entry.key, {img, url});
     while (this.map.size > 8) {
@@ -630,6 +1122,7 @@ let loadSeq = 0;
 /* ============================== navigation ============================== */
 async function selectImage(i) {
   const prev = state.cur;
+  if (prev >= 0 && prev !== i) flushMasks(state.images[prev]);
   if (i < 0 || i >= state.images.length) { state.cur = -1; curImg = null; renderAll(); requestDraw(); return; }
   state.cur = i; state.sel = -1; state.hover = -1;
   if (prev >= 0 && prev !== i) updateRow(prev);
@@ -637,11 +1130,13 @@ async function selectImage(i) {
   const seq = ++loadSeq;
   curImg = null;
   fitView();               // fit from manifest dims first for instant layout
+  decodeMasks(entry);
   renderAll(); requestDraw();
   const img = await imageCache.get(entry);
   if (seq !== loadSeq) return;
   curImg = img;
   fitView();
+  decodeMasks(entry);       // covers the size-mismatch-rescale case in imageCache.get
   const firstTodo = entry.dets.findIndex(d => !detDone(d));
   if (firstTodo >= 0) state.sel = firstTodo;
   renderAll(); requestDraw();
@@ -694,8 +1189,10 @@ function assign(name) {
   const d = e.dets[state.sel];
   d.label = name;
   state.dirty = true;
+  if (d._bmp) repaintMaskCanvas(d, e.width, e.height);
   const next = e.dets.findIndex((x, j) => j !== state.sel && !detDone(x));
   updateRow(state.cur);
+  applyFilmFilter();
   if (next >= 0) { state.sel = next; ensureVisible(e.dets[next]); }
   else toast("image done — Enter / N for the next one", "ok");
   renderAll(); requestDraw();
@@ -706,6 +1203,8 @@ function renameLabel(l) {
   if (state.labels.some(x => x !== l && x.name.toLowerCase() === to.toLowerCase())) { toast("that name already exists", "warn"); return; }
   for (const e of state.images) for (const d of e.dets) if (d.label === l.name) d.label = to;
   l.name = to; state.dirty = true;
+  const cur = curEntry();
+  if (cur) for (const d of cur.dets) if (d._bmp) repaintMaskCanvas(d, cur.width, cur.height);
   renderAll(); requestDraw();
 }
 function removeLabel(l) {
@@ -714,6 +1213,8 @@ function removeLabel(l) {
   for (const e of state.images) for (const d of e.dets) if (d.label === l.name) d.label = null;
   state.labels = state.labels.filter(x => x !== l);
   state.dirty = true;
+  const cur = curEntry();
+  if (cur) for (const d of cur.dets) if (d._bmp) repaintMaskCanvas(d, cur.width, cur.height);
   renderFilmstrip(); renderAll(); requestDraw();
 }
 
@@ -722,23 +1223,74 @@ function deleteSel() {
   const e = curEntry();
   if (!e || state.sel < 0) return;
   const det = e.dets[state.sel];
-  undoStack.push({imgKey: e.key, det, pos: state.sel});
+  undoStack.push({kind: "delete", imgKey: e.key, det, pos: state.sel});
   e.dets.splice(state.sel, 1);
   state.sel = Math.min(state.sel, e.dets.length - 1);
   state.dirty = true;
   toast("box #" + det.id + " deleted — U to undo");
   updateRow(state.cur); renderAll(); requestDraw();
 }
-function undoDelete() {
+function undo() {
   const u = undoStack.pop();
   if (!u) { toast("nothing to undo", "warn"); return; }
   const i = state.images.findIndex(e => e.key === u.imgKey);
   if (i < 0) return;
+
+  if (u.kind === "mask") {
+    if (i !== state.cur) selectImage(i).then(() => restoreMaskUndo(u));
+    else restoreMaskUndo(u);
+    return;
+  }
+  if (u.kind === "pen") {
+    if (i !== state.cur) selectImage(i).then(() => restorePenUndo(u));
+    else restorePenUndo(u);
+    return;
+  }
+  if (u.kind === "move") {
+    const restore = () => {
+      u.det.bbox = u.prevBbox;
+      state.dirty = true;
+      toast("box move undone");
+      renderAll(); requestDraw();
+    };
+    if (i !== state.cur) selectImage(i).then(restore);
+    else restore();
+    return;
+  }
+
   const e = state.images[i];
   e.dets.splice(Math.min(u.pos, e.dets.length), 0, u.det);
   state.dirty = true;
   if (i !== state.cur) selectImage(i);
   else { state.sel = Math.min(u.pos, e.dets.length - 1); updateRow(i); renderAll(); requestDraw(); }
+}
+function restoreMaskUndo(u) {
+  const e = curEntry();
+  const d = u.det;
+  d._bmp = u.snapshot;
+  ensureMaskCanvas(d, e.width, e.height);
+  repaintMaskCanvas(d, e.width, e.height);
+  d._bmpDirty = true;
+  state.dirty = true;
+  updateOutline(d, e.width, e.height);
+  if (state.mode === "pen") d._pen = d._outline ? d._outline.map(p => p.slice()) : undefined;
+  toast("mask edit undone");
+  requestDraw();
+}
+function restorePenUndo(u) {
+  const e = curEntry();
+  const d = u.det;
+  d._bmp = u.prevBmp;
+  d._outline = u.prevPen;
+  d._pen = state.mode === "pen" ? u.prevPen.map(p => p.slice()) : undefined;
+  ensureMaskCanvas(d, e.width, e.height);
+  repaintMaskCanvas(d, e.width, e.height);
+  d._bmpDirty = true;
+  state.dirty = true;
+  penHover = -1;
+  penSelected = new Set();
+  toast("pen edit undone");
+  requestDraw();
 }
 function nudgeSel(dx, dy) {
   const e = curEntry();
@@ -746,6 +1298,8 @@ function nudgeSel(dx, dy) {
   const d = e.dets[state.sel];
   const [x0, y0, x1, y1] = d.bbox, w = x1 - x0, h = y1 - y0;
   const nx = clamp(x0 + dx, 0, e.width - w), ny = clamp(y0 + dy, 0, e.height - h);
+  if (nx === x0 && ny === y0) return;
+  undoStack.push({kind: "move", imgKey: e.key, det: d, prevBbox: [...d.bbox]});
   d.bbox = [nx, ny, nx + w, ny + h];
   state.dirty = true;
   requestDraw();
@@ -864,8 +1418,26 @@ function draw() {
     ctx.fillText(e.file ? "decoding…" : "image file not loaded — use IMAGES", ox + 12, oy + 22);
   }
 
+  const showBox = state.viewMode !== "mask";
+  const showMask = state.viewMode !== "box";
+  const hasSel = state.sel >= 0;
+
+  if (showMask) {
+    const [ox, oy] = toScreen(0, 0);
+    e.dets.forEach((d, i) => {
+      if (!d._maskCanvas) return;
+      const isSel = i === state.sel;
+      if (hasSel && !isSel && i !== state.hover) return; // focus: hide other masks while one is selected
+      ctx.save();
+      ctx.globalAlpha = isSel ? 1 : 0.55;
+      ctx.drawImage(d._maskCanvas, ox, oy, e.width * state.view.scale, e.height * state.view.scale);
+      ctx.restore();
+    });
+  }
+
   e.dets.forEach((d, i) => {
     const sel = i === state.sel, hov = i === state.hover;
+    if (hasSel && !sel && !hov) return; // focus: hide other boxes while one is selected
     const done = detDone(d);
     const col = done ? (d.label === IGNORE ? "#7d8697" : labelColor(d.label)) : "#ff5d5d";
     const [x0, y0] = toScreen(d.bbox[0], d.bbox[1]);
@@ -873,20 +1445,18 @@ function draw() {
     const bw = x1 - x0, bh = y1 - y0;
 
     ctx.save();
-    if (hov || sel) { ctx.fillStyle = col + "14"; ctx.fillRect(x0, y0, bw, bh); }
-    ctx.lineWidth = sel ? 2.5 : hov ? 2.5 : 2;
-    ctx.strokeStyle = col;
-    ctx.setLineDash(done ? [] : [7, 5]);
-    ctx.strokeRect(x0, y0, bw, bh);
-    ctx.setLineDash([]);
+    if (showBox) {
+      if (hov || sel) { ctx.fillStyle = col + (sel ? "26" : "14"); ctx.fillRect(x0, y0, bw, bh); }
+      ctx.lineWidth = sel ? 3 : hov ? 2.5 : 2;
+      ctx.strokeStyle = col;
+      ctx.setLineDash(done ? [] : [7, 5]);
+      if (sel) { ctx.shadowColor = col; ctx.shadowBlur = 12; }
+      ctx.strokeRect(x0, y0, bw, bh);
+      ctx.shadowBlur = 0;
+      ctx.setLineDash([]);
+    }
 
     if (sel) {
-      ctx.strokeStyle = "rgba(255,255,255,.92)";
-      ctx.lineWidth = 1.4;
-      ctx.setLineDash([6, 5]);
-      ctx.lineDashOffset = -dashT;
-      ctx.strokeRect(x0 - 3, y0 - 3, bw + 6, bh + 6);
-      ctx.setLineDash([]);
       const pts = handlePoints(d);
       for (const k of HANDLES) {
         const [px, py] = pts[k];
@@ -897,23 +1467,25 @@ function draw() {
       }
     }
 
-    // chip
-    const txt = done
-      ? (d.label === IGNORE ? "ignore" : d.label)
-      : "#" + d.id + (d.score != null ? " · " + Number(d.score).toFixed(2) : "");
-    ctx.font = "700 11px " + MONO;
-    const tw = ctx.measureText(txt).width;
-    const cw = tw + 12, ch = 17;
-    let cx = x0, cy = y0 - ch - 3;
-    if (cy < 2) cy = y0 + 3;
-    if (cx + cw > w - 2) cx = w - 2 - cw;
-    if (cx < 2) cx = 2;
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.roundRect(cx, cy, cw, ch, 4);
-    ctx.fill();
-    ctx.fillStyle = "#10131a";
-    ctx.fillText(txt, cx + 6, cy + 12.5);
+    if (showBox) {
+      // chip
+      const txt = done
+        ? (d.label === IGNORE ? "ignore" : d.label)
+        : "#" + d.id + (d.score != null ? " · " + Number(d.score).toFixed(2) : "");
+      ctx.font = "700 11px " + MONO;
+      const tw = ctx.measureText(txt).width;
+      const cw = tw + 12, ch = 17;
+      let cx = x0, cy = y0 - ch - 3;
+      if (cy < 2) cy = y0 + 3;
+      if (cx + cw > w - 2) cx = w - 2 - cw;
+      if (cx < 2) cx = 2;
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.roundRect(cx, cy, cw, ch, 4);
+      ctx.fill();
+      ctx.fillStyle = "#10131a";
+      ctx.fillText(txt, cx + 6, cy + 12.5);
+    }
     ctx.restore();
   });
 
@@ -926,11 +1498,108 @@ function draw() {
     ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
     ctx.setLineDash([]);
   }
+
+  if (state.mode === "mask" && lastPointer) {
+    const r = state.brushRadius * state.view.scale;
+    ctx.beginPath();
+    ctx.arc(lastPointer[0], lastPointer[1], r, 0, Math.PI * 2);
+    ctx.strokeStyle = dragState && dragState.erase ? "#ff5d5d" : "#ffb454";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  // animated (marching-ants) silhouette outline for the selected box's mask — visible in
+  // any mode so the segmentation reads clearly, not just while actively pen-editing
+  if (showMask && state.mode !== "pen" && state.sel >= 0) {
+    const d = e.dets[state.sel];
+    if (d && d._outline) {
+      ctx.save();
+      ctx.setLineDash([6, 4]);
+      ctx.lineDashOffset = -dashT;
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      d._outline.forEach(([px, py], i) => {
+        const [osx, osy] = toScreen(px, py);
+        if (i === 0) ctx.moveTo(osx, osy); else ctx.lineTo(osx, osy);
+      });
+      ctx.closePath();
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+  }
+
+  if (state.mode === "pen" && state.sel >= 0) {
+    const d = e.dets[state.sel];
+    if (d && !d._newPath && !d._pen) ensurePenOutline(d, e.width, e.height);
+
+    if (d && d._newPath && d._newPath.length) {
+      ctx.save();
+      ctx.strokeStyle = "#9ce37d";
+      ctx.setLineDash([5, 4]);
+      ctx.lineDashOffset = -dashT;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      d._newPath.forEach(([px, py], i) => {
+        const [nsx, nsy] = toScreen(px, py);
+        if (i === 0) ctx.moveTo(nsx, nsy); else ctx.lineTo(nsx, nsy);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+      d._newPath.forEach(([px, py], i) => {
+        const [nsx, nsy] = toScreen(px, py);
+        ctx.fillStyle = i === 0 ? "#fff" : "#9ce37d";
+        ctx.strokeStyle = "#10131a";
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(nsx, nsy, i === 0 ? 5 : 3.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      });
+      ctx.restore();
+    } else if (d && d._pen) {
+      ctx.save();
+      ctx.setLineDash([6, 4]);
+      ctx.lineDashOffset = -dashT;
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      d._pen.forEach(([px, py], i) => {
+        const [psx, psy] = toScreen(px, py);
+        if (i === 0) ctx.moveTo(psx, psy); else ctx.lineTo(psx, psy);
+      });
+      ctx.closePath();
+      ctx.stroke();
+      ctx.setLineDash([]);
+      d._pen.forEach(([px, py], i) => {
+        const [psx, psy] = toScreen(px, py);
+        const isSel = penSelected.has(i);
+        ctx.fillStyle = i === penHover ? "#fff" : isSel ? "#7fd1f7" : "#ffb454";
+        ctx.strokeStyle = "#10131a";
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(psx, psy, (i === penHover || isSel) ? 5 : 3.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      });
+      ctx.restore();
+    }
+
+    if (dragState && dragState.kind === "pen-marquee") {
+      ctx.save();
+      ctx.strokeStyle = "#7fd1f7";
+      ctx.setLineDash([4, 3]);
+      ctx.lineWidth = 1.5;
+      const mx0 = Math.min(dragState.sx0, dragState.sx1), my0 = Math.min(dragState.sy0, dragState.sy1);
+      ctx.strokeRect(mx0, my0, Math.abs(dragState.sx1 - dragState.sx0), Math.abs(dragState.sy1 - dragState.sy0));
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+  }
 }
 
 /* ============================== pointer interactions ============================== */
 let dragState = null;
 let spaceDown = false;
+let lastPointer = null;   // [sx, sy] screen coords, for the mask-mode brush cursor ring
+let penHover = -1;        // index into the selected det's _pen array, or -1
+let penSelected = new Set(); // marquee-selected vertex indices into the selected det's _pen
+let pathResolveDet = null;   // det awaiting a Replace/Merge/Subtract/Cancel choice for a new path
 
 const CURSORS = {nw:"nwse-resize", se:"nwse-resize", ne:"nesw-resize", sw:"nesw-resize",
                  n:"ns-resize", s:"ns-resize", e:"ew-resize", w:"ew-resize"};
@@ -942,6 +1611,67 @@ cv.addEventListener("pointerdown", ev => {
   const [ix, iy] = toImage(sx, sy);
 
   if (ev.button === 1 || spaceDown) { dragState = {kind: "pan", lx: ev.clientX, ly: ev.clientY}; cv.classList.add("grabbing"); return; }
+
+  if (state.mode === "mask") {
+    if (ev.button !== 0 && ev.button !== 2) return;
+    const e = curEntry();
+    if (state.sel < 0) return;
+    const det = e.dets[state.sel];
+    ensureMaskEditable(det, e.width, e.height);
+    undoStack.push({kind: "mask", imgKey: e.key, det, snapshot: det._bmp.slice()});
+    const erase = ev.button === 2 || ev.altKey;
+    dragState = {kind: "mask", det, erase, lx: ix, ly: iy};
+    paintAt(det, e.width, e.height, ix, iy, state.brushRadius, erase);
+    requestDraw();
+    return;
+  }
+
+  if (state.mode === "pen") {
+    const e = curEntry();
+    if (state.sel < 0) return;
+    const d = e.dets[state.sel];
+
+    if (state.penDrawingNew) {
+      if (ev.button !== 0) return;
+      if (!d._newPath) d._newPath = [];
+      if (d._newPath.length >= 3) {
+        const [fx, fy] = toScreen(d._newPath[0][0], d._newPath[0][1]);
+        if (Math.hypot(sx - fx, sy - fy) <= 8) { openPathResolve(d); return; }
+      }
+      d._newPath.push([clamp(ix, 0, e.width), clamp(iy, 0, e.height)]);
+      requestDraw();
+      return;
+    }
+
+    if (!d._pen && !ensurePenOutline(d, e.width, e.height)) return;
+
+    if (ev.button === 2 && ev.altKey) {
+      const vi = hitPenVertex(sx, sy);
+      if (vi >= 0) deletePenVertexAt(vi);
+      return;
+    }
+    if (ev.button !== 0) return;
+
+    const vi = hitPenVertex(sx, sy);
+    if (vi >= 0) {
+      if (!penSelected.has(vi)) penSelected = new Set([vi]);
+      undoStack.push({kind: "pen", imgKey: e.key, det: d, prevPen: d._pen.map(p => p.slice()), prevBmp: d._bmp.slice()});
+      dragState = {kind: "pen-vertex", det: d, group: [...penSelected],
+                   startPts: [...penSelected].map(i => d._pen[i].slice()), ax: ix, ay: iy};
+      return;
+    }
+    const edge = hitPenEdge(sx, sy);
+    if (edge) {
+      undoStack.push({kind: "pen", imgKey: e.key, det: d, prevPen: d._pen.map(p => p.slice()), prevBmp: d._bmp.slice()});
+      d._pen.splice(edge.idx + 1, 0, edge.pt);
+      penSelected = new Set([edge.idx + 1]);
+      dragState = {kind: "pen-vertex", det: d, group: [edge.idx + 1], startPts: [edge.pt.slice()], ax: ix, ay: iy};
+      requestDraw();
+      return;
+    }
+    dragState = {kind: "pen-marquee", sx0: sx, sy0: sy, sx1: sx, sy1: sy};
+    return;
+  }
   if (ev.button !== 0) return;
 
   if (state.mode === "draw") {
@@ -951,14 +1681,16 @@ cv.addEventListener("pointerdown", ev => {
   }
   const hk = hitHandle(sx, sy);
   if (hk) {
-    dragState = {kind: "resize", which: hk, orig: [...curEntry().dets[state.sel].bbox]};
+    const det = curEntry().dets[state.sel];
+    undoStack.push({kind: "move", imgKey: curEntry().key, det, prevBbox: [...det.bbox]});
+    dragState = {kind: "resize", which: hk, orig: [...det.bbox]};
     return;
   }
   const i = hitBox(ix, iy);
   if (i >= 0) {
     if (state.sel !== i) { state.sel = i; renderBoxlist(); renderFooter(); requestDraw(); }
     dragState = {kind: "maybe-move", ax: ix, ay: iy, sx: ev.clientX, sy: ev.clientY,
-                 orig: [...curEntry().dets[i].bbox]};
+                 orig: [...curEntry().dets[i].bbox], undoPushed: false};
   } else {
     dragState = {kind: "maybe-pan", sx: ev.clientX, sy: ev.clientY, lx: ev.clientX, ly: ev.clientY};
   }
@@ -968,11 +1700,21 @@ cv.addEventListener("pointermove", ev => {
   const sx = ev.offsetX, sy = ev.offsetY;
   const [ix, iy] = toImage(sx, sy);
   $("fCoords").textContent = curEntry() ? Math.round(ix) + "," + Math.round(iy) : "—";
+  lastPointer = [sx, sy];
 
   if (!dragState) {
     let cur = "default";
     const hk = hitHandle(sx, sy);
-    if (state.mode === "draw") cur = "crosshair";
+    if (state.mode === "mask") { cur = "none"; requestDraw(); }
+    else if (state.mode === "pen") {
+      if (state.penDrawingNew) cur = "crosshair";
+      else {
+        const vi = hitPenVertex(sx, sy);
+        if (vi !== penHover) { penHover = vi; requestDraw(); }
+        cur = vi >= 0 ? "grab" : (hitPenEdge(sx, sy) ? "copy" : "crosshair");
+      }
+    }
+    else if (state.mode === "draw") cur = "crosshair";
     else if (hk) cur = CURSORS[hk];
     else {
       const i = hitBox(ix, iy);
@@ -981,6 +1723,31 @@ cv.addEventListener("pointermove", ev => {
       else if (spaceDown) cur = "grab";
     }
     cv.style.cursor = cur;
+    return;
+  }
+  if (dragState.kind === "mask") {
+    const e = curEntry();
+    const d = dragState;
+    paintStroke(d.det, e.width, e.height, d.lx, d.ly, ix, iy, state.brushRadius, d.erase);
+    d.lx = ix; d.ly = iy;
+    requestDraw();
+    return;
+  }
+  if (dragState.kind === "pen-vertex") {
+    const e = curEntry();
+    const d = dragState;
+    const dx = ix - d.ax, dy = iy - d.ay;
+    d.group.forEach((idx, k) => {
+      const [ox, oy] = d.startPts[k];
+      d.det._pen[idx] = [clamp(ox + dx, 0, e.width), clamp(oy + dy, 0, e.height)];
+    });
+    rasterizePenPolygon(d.det, e.width, e.height);
+    requestDraw();
+    return;
+  }
+  if (dragState.kind === "pen-marquee") {
+    dragState.sx1 = sx; dragState.sy1 = sy;
+    requestDraw();
     return;
   }
 
@@ -997,7 +1764,13 @@ cv.addEventListener("pointermove", ev => {
     d.lx = ev.clientX; d.ly = ev.clientY;
   } else if (d.kind === "maybe-move" || d.kind === "move") {
     if (d.kind === "maybe-move" &&
-        Math.hypot(ev.clientX - d.sx, ev.clientY - d.sy) > 3) d.kind = "move";
+        Math.hypot(ev.clientX - d.sx, ev.clientY - d.sy) > 3) {
+      d.kind = "move";
+      if (!d.undoPushed) {
+        undoStack.push({kind: "move", imgKey: e.key, det: e.dets[state.sel], prevBbox: [...d.orig]});
+        d.undoPushed = true;
+      }
+    }
     if (d.kind === "move" && state.sel >= 0) {
       const det = e.dets[state.sel];
       const w = d.orig[2] - d.orig[0], h = d.orig[3] - d.orig[1];
@@ -1050,6 +1823,19 @@ cv.addEventListener("pointerup", ev => {
     const det = e.dets[state.sel];
     det.bbox = det.bbox.map(Math.round);
     requestDraw();
+  } else if (d.kind === "pen-marquee" && e && state.sel >= 0) {
+    const det = e.dets[state.sel];
+    const dist = Math.hypot(d.sx1 - d.sx0, d.sy1 - d.sy0);
+    if (dist < 4) {
+      penSelected = new Set();
+    } else if (det._pen) {
+      const [ix0, iy0] = toImage(Math.min(d.sx0, d.sx1), Math.min(d.sy0, d.sy1));
+      const [ix1, iy1] = toImage(Math.max(d.sx0, d.sx1), Math.max(d.sy0, d.sy1));
+      const sel = new Set();
+      det._pen.forEach(([px, py], i) => { if (px >= ix0 && px <= ix1 && py >= iy0 && py <= iy1) sel.add(i); });
+      penSelected = sel;
+    }
+    requestDraw();
   }
 });
 
@@ -1058,6 +1844,8 @@ cv.addEventListener("dblclick", ev => {
   const i = hitBox(ix, iy);
   if (i >= 0) { state.sel = i; zoomToBox(curEntry().dets[i]); renderBoxlist(); renderFooter(); }
 });
+
+cv.addEventListener("contextmenu", ev => ev.preventDefault());
 
 cv.addEventListener("wheel", ev => {
   if (!curEntry()) return;
@@ -1068,12 +1856,22 @@ cv.addEventListener("wheel", ev => {
 
 /* ============================== keyboard ============================== */
 document.addEventListener("keydown", ev => {
-  if ($("help").open) return;
+  if ($("help").open || $("pathResolve").open) return;
   const t = ev.target;
   const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
   if (typing) return;
 
   if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "s") { ev.preventDefault(); exportJSON(); return; }
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "z") { ev.preventDefault(); undo(); return; }
+  if (ev.altKey && ev.key.startsWith("Arrow")) {
+    ev.preventDefault();
+    if (state.sel >= 0) {
+      const step = ev.shiftKey ? 10 : 1;
+      nudgeSel(ev.key === "ArrowLeft" ? -step : ev.key === "ArrowRight" ? step : 0,
+               ev.key === "ArrowUp" ? -step : ev.key === "ArrowDown" ? step : 0);
+    }
+    return;
+  }
   if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
 
   const k = ev.key;
@@ -1093,16 +1891,40 @@ document.addEventListener("keydown", ev => {
       const dir = ev.shiftKey ? -1 : 1;
       state.sel = ((state.sel < 0 ? (dir > 0 ? -1 : 0) : state.sel) + dir + e.dets.length) % e.dets.length;
       ensureVisible(e.dets[state.sel]);
+      if (state.mode === "pen" && !state.penDrawingNew && !ensurePenOutline(e.dets[state.sel], e.width, e.height)) {
+        setMode("select");
+      }
       renderBoxlist(); renderFooter(); requestDraw();
       break;
     }
-    case "Enter": jumpNextUnlabeled(); break;
-    case "x": case "X": case "Delete": case "Backspace": ev.preventDefault(); deleteSel(); break;
-    case "u": case "U": undoDelete(); break;
+    case "Enter":
+      if (state.mode === "pen" && state.penDrawingNew) {
+        const e = curEntry(); const d = e && state.sel >= 0 ? e.dets[state.sel] : null;
+        if (d && d._newPath && d._newPath.length >= 3) openPathResolve(d);
+        else toast("need at least 3 points to close the path", "warn");
+      } else jumpNextUnlabeled();
+      break;
+    case "x": case "X": case "Delete": case "Backspace":
+      ev.preventDefault();
+      if (state.mode === "pen" && !state.penDrawingNew && (penHover >= 0 || penSelected.size > 0)) deletePenVertex();
+      else deleteSel();
+      break;
+    case "u": case "U": undo(); break;
     case "b": case "B": setMode("draw"); break;
     case "v": case "V": setMode("select"); break;
+    case "m": case "M": setMode("mask"); break;
+    case "o": case "O": setMode("pen"); break;
+    case "i": case "I": toggleNewPath(); break;
+    case "[": state.brushRadius = clamp(state.brushRadius / 1.25, 4, 400); updateBrushLabel(); requestDraw(); break;
+    case "]": state.brushRadius = clamp(state.brushRadius * 1.25, 4, 400); updateBrushLabel(); requestDraw(); break;
     case "Escape":
-      if (state.mode === "draw") setMode("select");
+      if (state.mode === "pen" && state.penDrawingNew) {
+        const e = curEntry(); if (e && state.sel >= 0) delete e.dets[state.sel]._newPath;
+        state.penDrawingNew = false;
+        $("mNewPath").classList.remove("on");
+        setMode("pen");
+      }
+      else if (state.mode !== "select") setMode("select");
       else if (state.sel >= 0) { state.sel = -1; renderBoxlist(); renderFooter(); requestDraw(); }
       break;
     case "f": case "F": fitView(); requestDraw(); break;
@@ -1112,26 +1934,105 @@ document.addEventListener("keydown", ev => {
     case "+": case "=": { const [w, h] = stageSize(); zoomAt(w / 2, h / 2, 1.25); break; }
     case "-": case "_": { const [w, h] = stageSize(); zoomAt(w / 2, h / 2, 0.8); break; }
     case "?": $("help").showModal(); break;
-    case "ArrowLeft": case "ArrowRight": case "ArrowUp": case "ArrowDown": {
-      ev.preventDefault();
-      const step = ev.shiftKey ? 10 : 1;
-      if (state.sel >= 0) {
-        nudgeSel(k === "ArrowLeft" ? -step : k === "ArrowRight" ? step : 0,
-                 k === "ArrowUp" ? -step : k === "ArrowDown" ? step : 0);
-      } else if (k === "ArrowLeft") stepImage(-1);
-      else if (k === "ArrowRight") stepImage(1);
-      break;
-    }
+    case "ArrowLeft": case "ArrowUp": ev.preventDefault(); stepImage(-1); break;
+    case "ArrowRight": case "ArrowDown": ev.preventDefault(); stepImage(1); break;
   }
 });
 document.addEventListener("keyup", ev => { if (ev.key === " ") spaceDown = false; });
 
 function setMode(m) {
+  if (m === "mask" && (!curEntry() || state.sel < 0)) { toast("select a box first", "warn"); m = "select"; }
+  if (m === "pen") {
+    if (!curEntry() || state.sel < 0) { toast("select a box first", "warn"); m = "select"; }
+    else if (!ensurePenOutline(curEntry().dets[state.sel], curEntry().width, curEntry().height)) {
+      toast("paint a mask first (M), then fine-tune it with the pen tool", "warn");
+      m = "select";
+    }
+  }
+  if (m !== "pen") {
+    const e = curEntry();
+    if (e) for (const dd of e.dets) {
+      if (dd._pen) dd._outline = dd._pen;
+      delete dd._pen; delete dd._newPath;
+    }
+    penSelected = new Set();
+    state.penDrawingNew = false;
+    $("mNewPath").classList.remove("on");
+  }
   state.mode = m;
   $("mSelect").classList.toggle("on", m === "select");
   $("mDraw").classList.toggle("on", m === "draw");
+  $("mMask").classList.toggle("on", m === "mask");
+  $("mPen").classList.toggle("on", m === "pen");
   $("fMode").textContent = m.toUpperCase();
-  cv.style.cursor = m === "draw" ? "crosshair" : "default";
+  cv.style.cursor = m === "draw" ? "crosshair" : (m === "mask" || m === "pen") ? "none" : "default";
+  requestDraw();
+}
+function enterNewPath() {
+  if (!curEntry() || state.sel < 0) { toast("select a box first", "warn"); return; }
+  const e = curEntry(), d = e.dets[state.sel];
+  if (d._pen) d._outline = d._pen;
+  delete d._pen;
+  d._newPath = [];
+  state.mode = "pen";
+  state.penDrawingNew = true;
+  $("mSelect").classList.remove("on"); $("mDraw").classList.remove("on"); $("mMask").classList.remove("on");
+  $("mPen").classList.add("on"); $("mNewPath").classList.add("on");
+  $("fMode").textContent = "PEN·NEW";
+  cv.style.cursor = "none";
+  requestDraw();
+}
+function toggleNewPath() {
+  if (state.mode === "pen" && state.penDrawingNew) {
+    const e = curEntry();
+    if (e && state.sel >= 0) delete e.dets[state.sel]._newPath;
+    state.penDrawingNew = false;
+    $("mNewPath").classList.remove("on");
+    setMode("pen");
+  } else {
+    enterNewPath();
+  }
+}
+function openPathResolve(d) {
+  pathResolveDet = d;
+  $("prName").textContent = "#" + d.id;
+  $("pathResolve").showModal();
+}
+function resolvePath(action) {
+  const d = pathResolveDet;
+  pathResolveDet = null;
+  $("pathResolve").close();
+  if (!d) return;
+  const e = curEntry();
+  const path = d._newPath;
+  delete d._newPath;
+  state.penDrawingNew = false;
+  $("mNewPath").classList.remove("on");
+  if (action === "cancel" || !path || path.length < 3) { setMode("pen"); requestDraw(); return; }
+
+  const shapeBmp = polygonToBitmap(path, e.width, e.height);
+  ensureMaskEditable(d, e.width, e.height);
+  const snapshot = d._bmp.slice();
+  if (action === "replace") d._bmp.set(shapeBmp);
+  else if (action === "merge") { for (let i = 0; i < d._bmp.length; i++) if (shapeBmp[i]) d._bmp[i] = 1; }
+  else if (action === "subtract") { for (let i = 0; i < d._bmp.length; i++) if (shapeBmp[i]) d._bmp[i] = 0; }
+
+  undoStack.push({kind: "mask", imgKey: e.key, det: d, snapshot});
+  d._bmpDirty = true;
+  repaintMaskCanvas(d, e.width, e.height);
+  updateOutline(d, e.width, e.height);
+  state.dirty = true;
+  toast(action + "d new path into the mask — Ctrl+Z to undo", "ok");
+  setMode("pen");
+  requestDraw();
+}
+$("pathResolve").addEventListener("close", () => { if (pathResolveDet) resolvePath("cancel"); });
+function setViewMode(m) {
+  state.viewMode = m;
+  $("vBoth").classList.toggle("on", m === "both");
+  $("vBox").classList.toggle("on", m === "box");
+  $("vMask").classList.toggle("on", m === "mask");
+  requestDraw();
 }
 
 /* ============================== rendering (dom) ============================== */
@@ -1153,6 +2054,61 @@ function renderHeader() {
   $("pbar").style.width = (tot ? (100 * done / tot) : 0) + "%";
 }
 
+/* ============================== label filter (AND / OR / NOT, up to 4 terms) ============================== */
+// grammar: ['NOT'] label (('AND'|'OR') ['NOT'] label){0,3} — evaluated strictly left-to-right,
+// no precedence/parens; a bare "label label" without a connector implies AND
+function parseFilterQuery(q) {
+  const tokens = String(q || "").trim().split(/\s+/).filter(Boolean);
+  if (!tokens.length) return null;
+  const terms = [];
+  let i = 0;
+  while (i < tokens.length && terms.length < 4) {
+    let op = null;
+    if (terms.length > 0) {
+      const opTok = tokens[i] ? tokens[i].toUpperCase() : "";
+      if (opTok === "AND" || opTok === "OR") { op = opTok; i++; }
+      else op = "AND";
+    }
+    let neg = false;
+    if (tokens[i] && tokens[i].toUpperCase() === "NOT") { neg = true; i++; }
+    if (i >= tokens.length) break;
+    const label = tokens[i]; i++;
+    terms.push({op, neg, label});
+  }
+  return terms.length ? terms : null;
+}
+function imageHasLabel(entry, term) {
+  const t = String(term).trim().toLowerCase();
+  if (!t) return true;
+  return entry.dets.some(d => {
+    if (t === "unlabeled") return !detDone(d);
+    if (t === "ignore") return d.label === IGNORE;
+    return detDone(d) && d.label !== IGNORE && d.label.toLowerCase() === t;
+  });
+}
+function evalFilterQuery(terms, entry) {
+  if (!terms) return true;
+  let result = null;
+  for (const {op, neg, label} of terms) {
+    let match = imageHasLabel(entry, label);
+    if (neg) match = !match;
+    result = result === null ? match : (op === "OR" ? (result || match) : (result && match));
+  }
+  return result;
+}
+function applyFilmFilter() {
+  const input = $("filmFilter");
+  const terms = parseFilterQuery(input.value);
+  input.classList.toggle("bad", !!input.value.trim() && !terms);
+  let shown = 0;
+  state.images.forEach((e, i) => {
+    const match = !terms || evalFilterQuery(terms, e);
+    if (rowEls[i]) rowEls[i].classList.toggle("filtered-out", !match);
+    if (match) shown++;
+  });
+  $("filmcnt").textContent = terms ? (shown + "/" + state.images.length) : state.images.length;
+}
+
 function renderFilmstrip() {
   const list = $("filmlist");
   list.textContent = "";
@@ -1169,7 +2125,7 @@ function renderFilmstrip() {
     rowEls.push(b);
     updateRow(i);
   });
-  $("filmcnt").textContent = state.images.length;
+  applyFilmFilter();
 }
 function updateRow(i) {
   const b = rowEls[i], e = state.images[i];
@@ -1227,7 +2183,8 @@ function renderBoxlist() {
     const b = document.createElement("button");
     b.className = "brow" + (i === state.sel ? " sel" : "");
     b.innerHTML = '<span class="bid"></span><span class="chip"></span><span class="sc"></span>';
-    b.querySelector(".bid").textContent = "#" + d.id;
+    b.querySelector(".bid").textContent = "#" + d.id + (hasMask(d) ? " ◨" : "");
+    b.querySelector(".bid").title = hasMask(d) ? "has a segmentation mask" : "";
     const chip = b.querySelector(".chip");
     if (detDone(d)) {
       chip.textContent = d.label === IGNORE ? "ignore" : d.label;
@@ -1253,7 +2210,8 @@ function renderFooter() {
   const d = e && state.sel >= 0 ? e.dets[state.sel] : null;
   $("fSel").textContent = d
     ? "box #" + d.id + " · " + Math.round(d.bbox[2] - d.bbox[0]) + "×" + Math.round(d.bbox[3] - d.bbox[1]) +
-      (detDone(d) ? " · " + (d.label === IGNORE ? "ignore" : d.label) : " · unlabeled")
+      (detDone(d) ? " · " + (d.label === IGNORE ? "ignore" : d.label) : " · unlabeled") +
+      (hasMask(d) ? " · has mask" : "")
     : "no box selected";
 }
 
@@ -1275,9 +2233,40 @@ $("prevImg").addEventListener("click", () => stepImage(-1));
 $("nextImg").addEventListener("click", () => stepImage(1));
 $("mSelect").addEventListener("click", () => setMode("select"));
 $("mDraw").addEventListener("click", () => setMode("draw"));
+$("mMask").addEventListener("click", () => setMode("mask"));
+$("mPen").addEventListener("click", () => setMode("pen"));
+$("mNewPath").addEventListener("click", toggleNewPath);
+$("mFillHoles").addEventListener("click", fillHoles);
+$("prReplace").addEventListener("click", () => resolvePath("replace"));
+$("prMerge").addEventListener("click", () => resolvePath("merge"));
+$("prSubtract").addEventListener("click", () => resolvePath("subtract"));
+$("prCancel").addEventListener("click", () => resolvePath("cancel"));
+$("vBoth").addEventListener("click", () => setViewMode("both"));
+$("vBox").addEventListener("click", () => setViewMode("box"));
+$("vMask").addEventListener("click", () => setViewMode("mask"));
 $("zIn").addEventListener("click", () => { const [w, h] = stageSize(); zoomAt(w / 2, h / 2, 1.25); });
 $("zOut").addEventListener("click", () => { const [w, h] = stageSize(); zoomAt(w / 2, h / 2, 0.8); });
 $("zFit").addEventListener("click", () => { fitView(); requestDraw(); });
+
+function updateBrushLabel() { $("brLabel").textContent = Math.round(state.brushRadius) + "px"; }
+$("brDown").addEventListener("click", () => { state.brushRadius = clamp(state.brushRadius / 1.25, 4, 400); updateBrushLabel(); requestDraw(); });
+$("brUp").addEventListener("click", () => { state.brushRadius = clamp(state.brushRadius * 1.25, 4, 400); updateBrushLabel(); requestDraw(); });
+$("mClearMask").addEventListener("click", () => {
+  const e = curEntry();
+  if (!e || state.sel < 0) { toast("select a box first", "warn"); return; }
+  const d = e.dets[state.sel];
+  if (!d._bmp && !d.seg) { toast("box has no mask", "warn"); return; }
+  ensureMaskEditable(d, e.width, e.height);
+  undoStack.push({kind: "mask", imgKey: e.key, det: d, snapshot: d._bmp.slice()});
+  d._bmp.fill(0);
+  repaintMaskCanvas(d, e.width, e.height);
+  d._bmpDirty = true;
+  state.dirty = true;
+  d._outline = null;
+  if (state.mode === "pen") d._pen = undefined;
+  toast("mask cleared — U to undo");
+  requestDraw();
+});
 
 async function routeFiles(files) {
   const jsons = files.filter(f => f.name.toLowerCase().endsWith(".json"));
@@ -1314,6 +2303,11 @@ $("addBtn").addEventListener("click", addFromInput);
 $("addName").addEventListener("keydown", ev => {
   if (ev.key === "Enter") { ev.preventDefault(); addFromInput(); }
   if (ev.key === "Escape") { $("addName").value = ""; $("addName").blur(); }
+});
+
+$("filmFilter").addEventListener("input", applyFilmFilter);
+$("filmFilter").addEventListener("keydown", ev => {
+  if (ev.key === "Escape") { $("filmFilter").value = ""; applyFilmFilter(); $("filmFilter").blur(); }
 });
 
 /* drag & drop (files and folders) */

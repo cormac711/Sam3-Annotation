@@ -38,7 +38,10 @@ python 1_detect.py ./raw_images
 # -> ./raw_images/annotations.json  (COCO; every box in category "unlabeled")
 ```
 
-SAM 3 does *promptable concept segmentation*: you give it a noun phrase and it finds every instance.
+SAM 3 does *promptable concept segmentation*: you give it a noun phrase and it finds every instance —
+and because it's a segmentation model, not just a box detector, every proposal also comes with a
+per-instance mask. Masks are stored as COCO RLE alongside each box **by default**, so 2_annotate.html
+can show the actual silhouette and let you touch it up, not just a rectangle.
 
 | flag | what it does |
 |---|---|
@@ -46,9 +49,12 @@ SAM 3 does *promptable concept segmentation*: you give it a noun phrase and it f
 | `--threshold 0.4` | lower it if **small background characters** are missed (default 0.5) |
 | `--preview 8` | draw boxes on the first 8 images into `<folder>/previews` — check before labeling hundreds |
 | `--recursive` | scan subfolders (`previews/` is always skipped) |
-| `--save-masks` | also store SAM 3 segmentation masks as COCO RLE (needs `pip install pycocotools`) |
+| `--no-masks` | skip segmentation masks — boxes only, no pycocotools needed, smaller/faster JSON |
 | `--device cuda\|cpu` | force a device (default: auto) |
 | `--no-resume` | redo everything; by default re-runs skip images already in the JSON |
+
+Masks need `pip install pycocotools`; if it's missing, `1_detect.py` prints a one-time warning and
+falls back to boxes-only automatically — nothing breaks.
 
 For "stacked together / too small" posters: run once with `--preview`, look at the boxes, then tune
 `--threshold` and `--prompt`. False positives are cheap (one keypress to delete in step 2); the app's
@@ -65,6 +71,13 @@ Open **`2_annotate.html`** in any modern browser (double-click the file — no s
 
 The export is also your **save file**: load it back (or drop it into the folder — the app always picks the *newest* JSON it finds) to resume. Export often; progress lives only in the page until you do. Old pre-COCO manifests from the earlier pipeline load fine and are migrated to COCO on the next export.
 
+Selecting a box or mask **focuses** it — everything else on the canvas hides so you can work without
+clutter, and the selected one renders brighter/glowing (hover a different box to peek at it without
+losing your selection). The toolbar lives across the top of the canvas, grouped into TOOL / BRUSH /
+VIEW / ZOOM. Above the filmstrip, a **filter box** narrows which images are listed by character
+label — up to 4 terms combined with AND / OR / NOT (e.g. `naruto AND sakura`, `NOT ignore`); it also
+understands the special labels `ignore` and `unlabeled`.
+
 Key shortcuts (press `?` in the app for the full list):
 
 | key | action |
@@ -73,13 +86,37 @@ Key shortcuts (press `?` in the app for the full list):
 | `0` | mark as *ignore* (background mob / mascot / false positive worth keeping boxed) |
 | `Enter` | jump to next unlabeled box (crosses into the next image when done) |
 | `Tab` | cycle boxes in the image |
-| `X` / `U` | delete box / undo delete |
+| `X` | delete box (false positive) — or, in `PEN` mode, remove the hovered outline point |
+| `Ctrl`+`Z` / `U` | undo the last action — box move/resize, delete, mask edit, or pen edit |
 | `B` | draw a box SAM 3 missed (drag on the image) |
+| `M` | paint/erase the selected box's mask — drag to paint, right-drag or `Alt`+drag to erase |
+| `[` / `]` | shrink / grow the mask brush |
+| `O` | pen tool — edit the mask outline point-by-point (needs an existing mask) |
+| `I` | pen tool, new path — draw an independent new shape from scratch |
+| `Alt`+right-click | (in `PEN` mode) delete that outline point directly |
 | wheel / drag | zoom at cursor / pan — zoom way in for tiny characters |
-| arrows | nudge selected box (`Shift` = ×10); drag edges/corners to resize |
-| `N` / `P` | next / previous image |
+| `←` `→` `↑` `↓` | next / previous image; hold `Alt` to nudge the selected box instead (`Shift` = ×10) |
+| `N` / `P` | next / previous image (same as `←`/`→`) |
 
 Boxes are **red & dashed** until labeled; the filmstrip shows how many each image still needs.
+
+**Segmentation masks** load in automatically wherever SAM 3 produced one (translucent fill in the
+box's color). The view HUD's `BOTH` / `BOXES` / `MASKS` buttons switch what's drawn on the canvas —
+labeling still works in any view. A box without a mask — including ones you draw by hand with `B` —
+gets a blank one the instant you start painting on it with `M`. `CLEAR` wipes the selected box's
+mask; `FILL HOLES` fills any gaps fully enclosed inside it (SAM 3 sometimes leaves small unmasked
+speckles inside an otherwise solid silhouette). The selected box's silhouette is always outlined
+with an animated marching-ants dash, in any mode, so it reads clearly against the fill.
+
+For finer control than the brush, the `O` **pen tool** traces the mask's outline into draggable
+points — drag a point to reshape the silhouette, click an edge to add a point, `X`/`Delete` removes
+the hovered point, drag a rectangle over empty space to marquee-select several points and move or
+delete them together, `Alt`+right-click deletes one point instantly. `I` (**NEW PATH**) switches to
+placing brand-new points from scratch, independent of whatever's already there — click to place
+each point, click the start point (or press `Enter`) to close the loop, then choose **Replace**
+(swap in this new shape), **Merge** (union it into the mask), **Subtract** (cut it out), or
+**Cancel**. `Esc` abandons an in-progress new path. Every edit (brush or pen) is re-encoded to COCO
+RLE on `EXPORT`, and is undoable with `Ctrl`+`Z`.
 
 ## Step 3 — build the datasets
 
@@ -154,12 +191,12 @@ Standard COCO object-detection layout — readable by pycocotools, FiftyOne, CVA
      "area": 96800, "iscrowd": 0,
      "score": 0.93,                            // SAM 3 confidence (absent on hand-drawn boxes)
      "source": "detector",                     // or "manual"
-     "segmentation": {...}}                    // RLE, only with --save-masks
+     "segmentation": {...}}                    // RLE mask, present unless --no-masks / pycocotools missing
   ]
 }
 ```
 
-The two meta categories carry the workflow state: fresh step-1 output is 100% `unlabeled`; a finished, fully-labeled export contains no `unlabeled` category at all. Extra per-annotation fields (like `segmentation`) survive the app round-trip untouched.
+The two meta categories carry the workflow state: fresh step-1 output is 100% `unlabeled`; a finished, fully-labeled export contains no `unlabeled` category at all. `segmentation` round-trips through the app — viewable and editable with the mask brush (`M`) — and is re-encoded to COCO RLE on export; boxes with no mask simply omit the key.
 
 ## Gotchas
 

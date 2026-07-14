@@ -7,15 +7,23 @@ segmentation, text prompt "person" by default) on every image and writes a
 COCO-format `annotations.json` INTO that same folder. All boxes start in the
 "unlabeled" category — you turn them into character names with 2_annotate.html.
 
+SAM 3 is a *segmentation* model, not just a box detector — every proposal
+comes with a per-instance mask. Masks are stored as COCO RLE alongside each
+box by default, so 2_annotate.html can show and let you touch up the actual
+silhouette instead of just a rectangle (use --no-masks to skip them and get
+boxes only, e.g. for a quick low-dependency run).
+
     python 1_detect.py ./raw_images
     python 1_detect.py ./raw_images --prompt "anime character" --threshold 0.4
-    python 1_detect.py ./raw_images --recursive --preview 8 --save-masks
+    python 1_detect.py ./raw_images --recursive --preview 8 --no-masks
 
 Requirements:
-  * pip install torch transformers pillow   (transformers with SAM 3, v5+)
+  * pip install torch transformers pillow pycocotools   (transformers with SAM 3, v5+)
   * facebook/sam3 is a GATED model: request access once at
     https://huggingface.co/facebook/sam3 then run `hf auth login`.
   * First run downloads ~3.4 GB of weights. GPU strongly recommended.
+  * pycocotools encodes the segmentation masks; if it's missing, masks are
+    silently skipped (boxes still work fine) and a one-time warning is printed.
 
 Re-running resumes: images already in annotations.json are skipped
 (--no-resume to redo). --preview N draws the first N results into
@@ -125,6 +133,7 @@ def new_manifest(args):
                 "prompt": args.prompt,
                 "threshold": args.threshold,
                 "mask_threshold": args.mask_threshold,
+                "masks": args.save_masks,
             },
         },
         "licenses": [],
@@ -195,9 +204,9 @@ def main():
     ap.add_argument("--recursive", action="store_true", help="scan subfolders too")
     ap.add_argument("--preview", type=int, default=0, metavar="N",
                     help="draw boxes on the first N images into <folder>/previews")
-    ap.add_argument("--save-masks", action="store_true",
-                    help="also store SAM 3 segmentation masks as COCO RLE "
-                         "(needs `pip install pycocotools`; larger JSON)")
+    ap.add_argument("--no-masks", action="store_true",
+                    help="skip SAM 3 segmentation masks — boxes only, no "
+                         "pycocotools needed, smaller/faster JSON")
     ap.add_argument("--no-resume", action="store_true",
                     help="re-detect every image even if already in the manifest")
     ap.add_argument("-o", "--output", default=None,
@@ -213,11 +222,15 @@ def main():
     if not images:
         sys.exit(f"no images found in {root} (extensions: {sorted(IMAGE_EXTS)})")
 
+    args.save_masks = not args.no_masks
     if args.save_masks:
         try:
             import pycocotools  # noqa: F401
         except ImportError:
-            sys.exit("--save-masks needs pycocotools:  pip install pycocotools")
+            print("[warn] pycocotools not installed — segmentation masks will be "
+                  "skipped (boxes are unaffected). `pip install pycocotools` to "
+                  "enable, or pass --no-masks to silence this.", file=sys.stderr)
+            args.save_masks = False
 
     data = None if args.no_resume else (load_existing(out_path) if out_path.exists() else None)
     if data is None:
