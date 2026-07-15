@@ -1,4 +1,4 @@
-# Anime Character Curation Pipeline (SAM 3 edition)
+# Data Curation Pipeline (SAM 3 edition)
 
 Turn raw anime posters/illustrations into a **named-character training dataset** in three steps —
 detection by Meta's **SAM 3**, everything stored as **standard COCO**:
